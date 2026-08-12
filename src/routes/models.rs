@@ -3550,3 +3550,66 @@ pub struct UnknownStatusCase {
     #[serde(rename = "CaseYear")]
     pub case_year: i64,
 }
+
+
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct search_results_probe{
+    pub metadata: Metadata,
+    pub data: Data,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Metadata {
+    #[serde(rename = "api_version")]
+    pub api_version: String,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Data {
+    pub entities: Entities,
+    #[serde(rename = "has_more")]
+    pub has_more: bool,
+    #[serde(rename = "total_count")]
+    pub total_count: i64,
+    #[serde(rename = "company_count")]
+    pub company_count: i64,
+    #[serde(rename = "llp_count")]
+    pub llp_count: i64,
+    #[serde(rename = "proprietorship_count")]
+    pub proprietorship_count: i64,
+    #[serde(rename = "partnership_count")]
+    pub partnership_count: i64,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Entities {
+    pub companies: Vec<Company>,
+    pub llps: Vec<Llp>,
+    pub proprietorships: Vec<Value>,
+    pub partnerships: Vec<Value>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Company {
+    pub cin: String,
+    #[serde(rename = "legal_name")]
+    pub legal_name: String,
+    pub status: String,
+    pub bid: String,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Llp {
+    pub llpin: String,
+    #[serde(rename = "legal_name")]
+    pub legal_name: String,
+    pub status: String,
+    pub bid: String,
+}
