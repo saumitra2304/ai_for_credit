@@ -1,2 +1,0 @@
-fn(State<AppState>, Query<summary_params>) -> impl Future<Output = Result<Json<Value>, (StatusCode, std::string::String)>> {insta_summary}
-fn(State<AppState>, Query<summary_params>) -> impl Future<Output = Result<Json<Value>, (StatusCode, std::string::String)>> {insta_summary}: Handler<_, _>

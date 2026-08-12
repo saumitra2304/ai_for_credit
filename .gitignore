@@ -1,0 +1,18 @@
+# Rust build artifacts
+target/
+
+# Python cache and byte-code files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment files
+.env
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+
+# OS generated files
+.DS_Store
+Thumbs.db
