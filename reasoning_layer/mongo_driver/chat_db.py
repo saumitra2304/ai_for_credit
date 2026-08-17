@@ -28,7 +28,7 @@ async def create_chat(user_id, chat_id, cin_list, query):
     chat = chat_memory(
         user_id=user_id,
         chat_id=chat_id,
-        sme_data=[],
+        sme_data={},
         message_trail=[]
     )
     await collection.insert_one(chat.model_dump())
