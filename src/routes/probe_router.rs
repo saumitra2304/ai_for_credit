@@ -67,7 +67,7 @@ pub struct company_details_params {
 pub async fn company_comprehensive_details(
     State(app_state): State<AppState>,
     Query(params): Query<company_details_params>,
-) -> Result<Json<Valueß>, String> {
+) -> Result<Json<Value>, String> {
     let api_key = app_state.probe_key;
     let client = app_state.reqwest_client;
 
