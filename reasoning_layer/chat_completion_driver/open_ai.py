@@ -1,70 +1,190 @@
 import asyncio
 import os
+import re
 import sys
+import json
+
 from dotenv import load_dotenv
 load_dotenv()
 
 from openai import AsyncOpenAI
 
-# Default to local vLLM instance on port 8000
+# Local Ollama, OpenAI-compatible endpoint. The api_key is required by the
+# client but ignored by Ollama.
 client = AsyncOpenAI(
-    base_url=os.getenv("OPENAI_BASE_URL", "http://127.0.0.1:8000/v1"),
-    api_key=os.getenv("OPENAI_API_KEY", "EMPTY")
+    base_url=os.getenv("OPENAI_BASE_URL", "http://127.0.0.1:11434/v1"),
+    api_key=os.getenv("OPENAI_API_KEY", "ollama"),
+    timeout=1800.0,          # 30 min: a long final call must not be cut off mid-stream
 )
 
-import json
+MODEL_NAME = os.getenv("OPENAI_MODEL_NAME", "qwen3:8b")
+
+# Output caps. Without these a confused model generates until it hits the
+# context ceiling, which is what turned one extraction call into 16 minutes.
+MAX_TOKENS_EXTRACT = 1200
+MAX_TOKENS_FINAL = 4000
+
+# ~4 chars per token. 32k context minus room for the response.
+CHAR_BUDGET = 100_000
+
+# Each prior turn's response is a full analysis with tables. Left untrimmed,
+# two of them alone can eat half the context window.
+HISTORY_CHARS_PER_MSG = 1500
+
+_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
+
 
 def safe_print(text):
     try:
         print(text)
     except UnicodeEncodeError:
-        encoding = sys.stdout.encoding or 'utf-8'
-        print(text.encode(encoding, errors='replace').decode(encoding))
+        encoding = sys.stdout.encoding or "utf-8"
+        print(text.encode(encoding, errors="replace").decode(encoding))
+
+
+def _log(msg):
+    print(msg, file=sys.stderr, flush=True)
+
+
+def strip_thinking(text):
+    """Remove Qwen3 reasoning blocks. /no_think is a soft switch and is not
+    always honoured, so strip defensively rather than trusting it."""
+    if not text:
+        return ""
+    return _THINK_RE.sub("", text).strip()
+
+
+def _join_information(company_information_list):
+    """Join without json.dumps when the items are already strings.
+
+    json.dumps on a list of JSON strings escapes every quote, inflating the
+    payload 20-30% for no benefit.
+    """
+    if not company_information_list:
+        return ""
+    if all(isinstance(x, str) for x in company_information_list):
+        return "\n\n".join(company_information_list)
+    return json.dumps(company_information_list, separators=(",", ":"))
+
+
+def _build_history(chat_history):
+    lines = []
+    trail = getattr(chat_history, "message_trail", None) or []
+    for msg in trail:
+        query = (msg.get("query") or "")[:400]
+        response = (msg.get("response") or "")[:HISTORY_CHARS_PER_MSG]
+        lines.append(f"User: {query}")
+        lines.append(f"Assistant: {response}")
+    return "\n".join(lines)
+
+
+EXTRACT_INSTRUCTION = (
+    "You are a data reduction utility working on Indian MCA company filings.\n"
+    "Output ONLY the figures a credit analyst needs, one per line, as "
+    "`label: value`. Keep labels and values exactly as given.\n"
+    "Include: revenue, operating profit, PAT, total equity, total debt, "
+    "current and quick ratio, debt/equity, interest coverage, inventory / "
+    "debtor / payable days, operating cash flow.\n"
+    "Skip: document ids, auditor addresses, PANs, registration numbers, "
+    "director details, and any field whose value is null or zero.\n"
+    "No introduction, no analysis, no conclusion, no commentary. "
+    "If a figure is absent, omit the line rather than writing 'not available'.\n"
+    "/no_think"
+)
+
+
+def _final_instruction(history_str):
+    return (
+        "You are an expert financial analyst specialising in SME and corporate "
+        "credit risk assessment.\n\n"
+        + (f"Previous conversation:\n{history_str}\n\n" if history_str else "")
+        + "Produce a credit assessment with these four sections:\n\n"
+        "1. FINANCIAL SUMMARY TABLES\n"
+        "   Markdown tables with years as columns. One table for P&L, one for "
+        "the balance sheet, one for key ratios. Reproduce values exactly as "
+        "supplied; do not recalculate or round. Include only line items present "
+        "in the data.\n\n"
+        "2. TREND ANALYSIS\n"
+        "   Revenue and profitability direction, liquidity (current/quick), "
+        "solvency (debt/equity, interest coverage), and working-capital "
+        "efficiency (inventory/debtor/payable days) across the years given. "
+        "Cite the specific numbers you are reasoning from.\n\n"
+        "3. CREDIT STRENGTHS AND RED FLAGS\n"
+        "   Bullet points. Each one anchored to a figure.\n\n"
+        "4. RISK CONCLUSION\n"
+        "   A short verdict with the two or three factors that drive it.\n\n"
+        "Analyse whatever is provided. If credit ratings, director profiles or "
+        "schedules are absent, note it once as a data limitation and move on — "
+        "do not stop or ask for more data. Do not restate the raw input; the "
+        "tables plus your analysis are the whole deliverable."
+    )
+
 
 async def chat_endpoint(query, company_information_list, chat_history, is_final=False):
+    company_information = _join_information(company_information_list)
+    history_str = _build_history(chat_history) if is_final else ""
+
     if is_final:
-        # For the final summary, it's a list of strings. Join them cleanly.
-        company_information = "\n".join(company_information_list)
+        developer_instruction = _final_instruction(history_str)
+        max_tokens = MAX_TOKENS_FINAL
+        temperature = 0.4          # some latitude for the written analysis
     else:
-        # For the chunks, it's a list of dicts. Use extremely compact JSON to save tokens.
-        company_information = json.dumps(company_information_list, separators=(',', ':'))
-    # Format message trail cleanly to avoid passing the massive raw sme_data dictionary in chat_history
-    history_lines = []
-    if chat_history and hasattr(chat_history, "message_trail") and chat_history.message_trail:
-        for msg in chat_history.message_trail:
-            history_lines.append(f"User: {msg.get('query', '')}")
-            history_lines.append(f"Assistant: {msg.get('response', '')}")
-    history_str = "\n".join(history_lines)
-    
+        developer_instruction = EXTRACT_INSTRUCTION
+        max_tokens = MAX_TOKENS_EXTRACT
+        temperature = 0.1          # extraction must not paraphrase or invent
+
+    user_content = f"{query}\n\nCompany Data:\n{company_information}"
+
+    total_chars = len(developer_instruction) + len(user_content)
+    _log(f"[llm final={is_final} chars={total_chars} ~tokens={total_chars // 4} "
+         f"max_out={max_tokens}]")
+    if total_chars > CHAR_BUDGET:
+        # Past this point Ollama silently discards the oldest half of the KV
+        # cache and re-processes, which is the multi-minute stall with no output.
+        _log(f"[llm WARNING payload exceeds {CHAR_BUDGET} chars; a context "
+             f"shift is likely. Reduce the input rather than raising num_ctx.]")
+
+    # Qwen3 handles the system role properly. The single-user-message
+    # workaround was for Gemma and is no longer needed.
+    messages = [
+        {"role": "system", "content": developer_instruction},
+        {"role": "user", "content": user_content},
+    ]
+
+    pieces = []
+    try:
+        stream = await client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            stream=True,          # so you can see progress instead of waiting blind
+        )
+        async for chunk in stream:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta
+            text = getattr(delta, "content", None)
+            if text:
+                pieces.append(text)
+                print(text, end="", file=sys.stderr, flush=True)
+        print("", file=sys.stderr, flush=True)
+    except asyncio.CancelledError:
+        _log("[llm cancelled]")
+        raise
+    except Exception as exc:
+        _log(f"[llm error {type(exc).__name__}: {exc}]")
+        raise
+
+    raw = "".join(pieces)
+
+    # Keep reasoning out of the extraction output: it would otherwise be fed
+    # forward into the final prompt as if it were data.
+    response_content = strip_thinking(raw) if not is_final else (raw or "").strip()
+
+    _log(f"[llm done chars_out={len(response_content)} "
+         f"~tokens_out={len(response_content) // 4}]")
+
     if is_final:
-        developer_instruction = (
-            f"This is the previous chat history:\n{history_str}\n\n"
-            "You are an expert financial analyst specializing in SME (Small and Medium Enterprises) "
-            "and corporate credit risk analysis. Your goal is to perform a comprehensive financial analysis and credit risk assessment based on the provided company data.\n\n"
-            "CRITICAL INSTRUCTIONS:\n"
-            "1. ANALYZE WHAT IS PRESENT: Focus on the actual numbers and data provided. If some elements (like credit ratings, director profiles, or certain financial schedules) are missing, briefly note it as a data limitation, but DO NOT stop, complain, or ask the user for more information. You MUST analyze whatever data is given to the absolute best of your ability.\n"
-            "2. TABULATE AND SHOW DATA: You MUST present the financial figures, including Balance Sheet items (Assets & Liabilities), Profit & Loss details, and key financial ratios, in clear, well-structured Markdown tables. Make sure every table is complete and contains the exact values and labels.\n"
-            "3. FINANCIAL RISK ASSESSMENT: Provide a detailed, quantitative analysis based on the tabulated data. Evaluate Revenue & Profitability trends, Liquidity (current/quick ratios), Solvency (debt/equity ratios), and Operational Efficiency (inventory/receivable days) across the available years (e.g., 2023, 2024, 2025).\n"
-            "4. CREDIT RISK SYNTHESIS: Provide a clear synthesis highlighting the key credit strengths, red flags/weaknesses, and a final risk conclusion."
-        )
-    else:
-        developer_instruction = (
-            "You are a precise data extraction utility. Your task is to extract and list the financial numbers, ratios, and items present in the company data, ALONG WITH THEIR EXACT LABELS.\n"
-            "Do not analyze, do not discuss weaknesses, do not write introduction or conclusion. Keep your output extremely brief and focused."
-        )
-    
-    model_name = os.getenv("OPENAI_MODEL_NAME", "google/gemma-2-2b-it")
-    
-    # Use a single "user" role content because local vLLM running Gemma does not support "system" / "developer" role
-    combined_content = f"{developer_instruction}\n\nUser Query: {query}\n\nCompany Data:\n{company_information}"
-    
-    completion = await client.chat.completions.create(
-        model=model_name,
-        messages=[
-            {"role": "user", "content": combined_content}
-        ]
-    )
-    
-    response_content = completion.choices[0].message.content
-    safe_print(response_content)
+        safe_print(response_content)
     return response_content

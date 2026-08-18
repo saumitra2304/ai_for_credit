@@ -1,5 +1,4 @@
 import aiohttp
-import json
 from fastapi import FastAPI
 import asyncio
 from contextlib import asynccontextmanager
@@ -9,6 +8,7 @@ from sme_api.insta_summary_f import insta_summary
 from pydantic import BaseModel
 from mongo_driver.chat_db import get_chat, create_chat, update_chat
 from sme_api.probe24_comp_details import company_details
+from financial_flatten import flatten_all
 
 load_dotenv()
 
@@ -27,28 +27,6 @@ class ChatRequest(BaseModel):
     chat_id: int
     user_id: int
 
-def filter_company_details(res: dict) -> dict:
-    if not isinstance(res, dict) or "data" not in res:
-        return res
-    
-    data = res["data"]
-    filtered_data = {}
-    
-    # Keep only the company identification/info and detailed financials
-    if "company" in data:
-        filtered_data["company"] = data["company"]
-        
-    if "financials" in data and isinstance(data["financials"], list):
-        # Keep stand-alone and consolidated financials for the last 3 years
-        filtered_data["financials"] = [
-            f for f in data["financials"]
-            if isinstance(f, dict) and any(str(f.get("year", "")).startswith(y) for y in ["2025", "2024", "2023"])
-        ]
-        
-    return {
-        "metadata": res.get("metadata", {}),
-        "data": filtered_data
-    }
 
 @app.post("/chat")
 async def chat(request: ChatRequest):
@@ -83,56 +61,28 @@ async def chat(request: ChatRequest):
                 chat_history.sme_data[i] = res
                 results.append(res)
 
-        # Filter results before passing to LLM to keep only the relevant parts
-        filtered_results = [filter_company_details(res) for res in results]
-        results_text = json.dumps(filtered_results, indent=2)
-        
-        # 6000 characters fits easily within Gemma's context limit
-        max_chars = 6000
-        chunks = []
-        current_chunk = []
-        current_length = 0
-        for line in results_text.splitlines():
-            if current_length + len(line) + 1 > max_chars:
-                chunks.append("\n".join(current_chunk))
-                current_chunk = [line]
-                current_length = len(line) + 1
-            else:
-                current_chunk.append(line)
-                current_length += len(line) + 1
-        if current_chunk:
-            chunks.append("\n".join(current_chunk))
+        # Deterministic flattening replaces the map/reduce LLM passes.
+        #
+        # The old pipeline sent ~9k tokens of JSON to the model and asked it to
+        # transcribe every one of ~730 labelled fields, then asked a second call
+        # to compress that transcription. Both steps were output-bound: roughly
+        # 7000 generated tokens each, at ~7 tokens/sec, before the analysis had
+        # even started. This does the same reduction in Python, exactly, and
+        # leaves a single LLM call to do the only thing it is actually needed
+        # for -- the credit judgement.
+        #
+        # Note this receives `results`, NOT a filtered copy. flatten_all reads
+        # probe_financial_score, msme_supplier_payment_delays, legal_history and
+        # credit_ratings, all of which the old filter_company_details discarded.
+        flat = flatten_all(results)
 
-        # Run summaries sequentially to avoid overloading the local model
-        summaries = []
-        for idx, chunk in enumerate(chunks, 1):
-            batch_query = (
-                f"Extract and list the financial numbers, ratios, balance sheet items, and P&L figures present in this JSON batch ({idx}/{len(chunks)}). "
-                "Output them in a very compact bulleted list. YOU MUST INCLUDE THE EXACT LABEL FOR EVERY NUMBER (e.g., 'Paid-up Capital: 1996972240', 'Revenue Growth: 44.85'). "
-                "Do not write any introduction, analysis, weaknesses, recommendations, or filler text. "
-                "Your entire response must be extremely brief and contain only the labels and their corresponding numbers."
+        if not flat.strip():
+            raise ValueError(
+                f"No STANDALONE 2023-2025 financials found for {request.cin_list}. "
+                "Check the API response shape before blaming the model."
             )
-            # Await each request sequentially
-            summary = await chat_endpoint(batch_query, [chunk], chat_history, is_final=False)
-            summaries.append(summary)
 
-        # Recursive reduce: if the combined summaries are too long, summarize them further in batches
-        while True:
-            combined_length = sum(len(s) for s in summaries)
-            # 10000 characters is roughly 2500 tokens, leaving room for instructions, history, and output
-            if combined_length < 10000: 
-                break
-            
-            new_summaries = []
-            # Group summaries in batches of 2 to reduce them
-            for i in range(0, len(summaries), 2):
-                chunk_group = summaries[i:i+2]
-                reduce_query = "Combine and summarize these extracted financial details compactly. Keep all exact numbers and labels, but remove any duplicate information or filler."
-                reduced = await chat_endpoint(reduce_query, chunk_group, chat_history, is_final=False)
-                new_summaries.append(reduced)
-            summaries = new_summaries
-
-        chat_response = await chat_endpoint(request.query, summaries, chat_history, is_final=True)
+        chat_response = await chat_endpoint(request.query, [flat], chat_history, is_final=True)
 
         chat_history.message_trail.append({"query": request.query, "response": chat_response})
 
@@ -144,6 +94,6 @@ async def chat(request: ChatRequest):
         return chat_response
     except Exception as e:
         import traceback
-        with open("error.log", "w", encoding="utf-8") as f:
+        with open("error.log", "a", encoding="utf-8") as f:
             traceback.print_exc(file=f)
         raise e
