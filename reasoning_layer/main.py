@@ -1,4 +1,5 @@
 import aiohttp
+import sys
 from fastapi import FastAPI
 import asyncio
 from contextlib import asynccontextmanager
@@ -8,7 +9,7 @@ from sme_api.insta_summary_f import insta_summary
 from pydantic import BaseModel
 from mongo_driver.chat_db import get_chat, create_chat, update_chat
 from sme_api.probe24_comp_details import company_details
-from financial_flatten import flatten_all
+from financial_flatten import flatten_company
 
 load_dotenv()
 
@@ -26,6 +27,15 @@ class ChatRequest(BaseModel):
     query: str
     chat_id: int
     user_id: int
+
+
+def _company_label(entry: dict) -> str:
+    """Pull a display name for headers without depending on flatten_company's
+    text output."""
+    company = (entry.get("data", {}) or {}).get("company", {}) or {}
+    name = company.get("legal_name") or "Unknown company"
+    cin = company.get("cin") or "?"
+    return f"{name} (CIN {cin})"
 
 
 @app.post("/chat")
@@ -61,28 +71,70 @@ async def chat(request: ChatRequest):
                 chat_history.sme_data[i] = res
                 results.append(res)
 
-        # Deterministic flattening replaces the map/reduce LLM passes.
+        # -------------------------------------------------------------------
+        # Phase 1: one LLM call per company, run sequentially.
         #
-        # The old pipeline sent ~9k tokens of JSON to the model and asked it to
-        # transcribe every one of ~730 labelled fields, then asked a second call
-        # to compress that transcription. Both steps were output-bound: roughly
-        # 7000 generated tokens each, at ~7 tokens/sec, before the analysis had
-        # even started. This does the same reduction in Python, exactly, and
-        # leaves a single LLM call to do the only thing it is actually needed
-        # for -- the credit judgement.
-        #
-        # Note this receives `results`, NOT a filtered copy. flatten_all reads
-        # probe_financial_score, msme_supplier_payment_delays, legal_history and
-        # credit_ratings, all of which the old filter_company_details discarded.
-        flat = flatten_all(results)
+        # Ollama serves one request at a time regardless (OLLAMA_NUM_PARALLEL=1
+        # on this box), so sequential vs concurrent costs the same wall clock
+        # here -- it just avoids joining every company into one prompt whose
+        # context grows with cin_list length.
+        # -------------------------------------------------------------------
+        sections = []
+        flats = []          # (label, flattened_table) for companies with data
+        per_company_answers = []
 
-        if not flat.strip():
-            raise ValueError(
-                f"No STANDALONE 2023-2025 financials found for {request.cin_list}. "
-                "Check the API response shape before blaming the model."
+        for entry in results:
+            label = _company_label(entry)
+            flat = flatten_company(entry)
+
+            if not flat.strip():
+                print(f"[skip] no STANDALONE 2023-2025 financials for {label}",
+                      file=sys.stderr, flush=True)
+                sections.append(f"## {label}\n\nNo 2023-2025 standalone financials on record.")
+                continue
+
+            flats.append((label, flat))
+            per_company_query = f"{request.query}\n\n(This call covers only: {label}.)"
+            response = await chat_endpoint(per_company_query, [flat], chat_history, is_final=True)
+            per_company_answers.append(response)
+            sections.append(f"## {label}\n\n{response}")
+
+        if not sections:
+            raise ValueError(f"No usable data for {request.cin_list}")
+
+        # ---------------------------------------------------------------
+        # Phase 2: one final call that actually answers request.query.
+        #
+        # Each per-company call above was scoped to a single company and
+        # forced through the fixed four-section template, so a comparative
+        # or cross-company question ("which of these is the safer bet")
+        # never got directly answered anywhere. This call sees every
+        # company's flattened table together and is asked the user's
+        # original question with no per-company framing.
+        #
+        # Skipped for a single company: re-running the same table through
+        # a second ~9-minute generation would just restate the answer
+        # already produced in Phase 1.
+        # ---------------------------------------------------------------
+        if len(flats) > 1:
+            combined_tables = "\n\n".join(f"### {label}\n{table}" for label, table in flats)
+            synthesis_query = (
+                f"{request.query}\n\n"
+                f"You have already produced a detailed breakdown for each company "
+                f"individually (shown after this answer). Answer the question above "
+                f"directly, comparing across all {len(flats)} companies using the "
+                f"tables below. Be direct and specific -- name the company where "
+                f"relevant rather than describing them abstractly."
             )
+            final_answer = await chat_endpoint(synthesis_query, [combined_tables], chat_history, is_final=True)
+        else:
+            final_answer = per_company_answers[0]
 
-        chat_response = await chat_endpoint(request.query, [flat], chat_history, is_final=True)
+        chat_response = (
+            "# Answer\n\n" + final_answer
+            + "\n\n---\n\n# Per-Company Detail\n\n"
+            + "\n\n---\n\n".join(sections)
+        )
 
         chat_history.message_trail.append({"query": request.query, "response": chat_response})
 

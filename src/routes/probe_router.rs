@@ -1,9 +1,13 @@
-use axum::{Json, extract::{Query,State}};
-use reqwest::{Client, Url};
-use serde_json::json;
 use crate::AppState;
-use serde::Deserialize;
 use crate::routes::models::search_results_probe;
+use axum::{
+    Json,
+    extract::{Query, State},
+};
+use reqwest::{Client, Url};
+use serde::Deserialize;
+use serde_json::Value;
+use serde_json::json;
 
 use crate::routes::probe_models::CompanyDetails;
 
@@ -18,7 +22,10 @@ pub struct params {
 // --header 'Accept: application/json' \
 // --header 'x-api-version: 1.3'
 
-pub async fn probe_search(State(app_state): State<AppState>, Query(search_paramas): Query<params>) -> Result<Json<search_results_probe>, String> {
+pub async fn probe_search(
+    State(app_state): State<AppState>,
+    Query(search_paramas): Query<params>,
+) -> Result<Json<search_results_probe>, String> {
     let api_key = app_state.probe_key;
     let client = app_state.reqwest_client;
 
@@ -44,38 +51,33 @@ pub async fn probe_search(State(app_state): State<AppState>, Query(search_parama
 
     println!("status: {}", response.status());
 
-    let resp :search_results_probe= response
+    let resp: search_results_probe = response
         .json()
         .await
         .map_err(|e| format!("error getting from probe42 {e}"))?;
 
-    
-
     Ok(Json(resp))
-
-
-
-
-
-
 }
 // curl --location 'https://api.probe42.in/probe_pro_sandbox/companies/U15549PN1992FTC065522/comprehensive-details' --header 'x-api-key: Replace this with your API Key' --header 'Accept: application/json' --header 'x-api-version: 1.3'
 
-#[derive(Debug,Deserialize)]
-pub struct company_details_params{
-    cin:String
+#[derive(Debug, Deserialize)]
+pub struct company_details_params {
+    cin: String,
 }
-pub async fn company_comprehensive_details(State(app_state): State<AppState>,Query(params): Query<company_details_params>)-> Result<Json<CompanyDetails>,String>{
-
-
+pub async fn company_comprehensive_details(
+    State(app_state): State<AppState>,
+    Query(params): Query<company_details_params>,
+) -> Result<Json<Valueß>, String> {
     let api_key = app_state.probe_key;
     let client = app_state.reqwest_client;
 
     let cin = params.cin;
 
-    let url= format!("https://api.probe42.in/probe_pro_sandbox/companies/{cin}/comprehensive-details");
+    let url =
+        format!("https://api.probe42.in/probe_pro_sandbox/companies/{cin}/comprehensive-details");
 
-    let resp:CompanyDetails = client.get(url)
+    let resp: Value = client
+        .get(url)
         .header("x-api-key", api_key)
         .header("Accept", "application/json")
         .header("x-api-version", "1.3")
@@ -83,7 +85,8 @@ pub async fn company_comprehensive_details(State(app_state): State<AppState>,Que
         .await
         .map_err(|e| format!("error sending to probe42 {e}"))?
         .json()
-        .await.map_err(|e|format!("error unmarshaling comp details {e}"))?;
+        .await
+        .map_err(|e| format!("error unmarshaling comp details {e}"))?;
 
     Ok(Json(resp))
 }
