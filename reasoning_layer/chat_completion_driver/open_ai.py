@@ -120,11 +120,36 @@ def _final_instruction(history_str):
     )
 
 
-async def chat_endpoint(query, company_information_list, chat_history, is_final=False):
+CREDIT_INSTRUCTION = (
+    "You are a credit-rating and distress analyst for Indian corporates.\n"
+    "The user message contains the full credit/distress JSON for one company. "
+    "Write a clear prose summary of everything that IS in the payload — "
+    "do not reply with a blank template or say 'none' for fields that have "
+    "values (e.g. struckoff248_details, key_indicators, debt figures).\n\n"
+    "Where data exists, discuss: rating migration, agency divergence, "
+    "withdrawn/unaccepted ratings, rated quantum vs latest_standalone_debt, "
+    "and any mismatch between key_indicators.credit_rating and credit_ratings. "
+    "Also cover defaulter_list, bifr_history, cdr_history, "
+    "legal_cases_of_financial_disputes.\n\n"
+    "Only note 'not in payload' for arrays/objects that are literally empty or "
+    "null. Do not invent ratings. Quote agency, instrument, date, grade, "
+    "outlook, and amounts when present.\n"
+    "/no_think"
+)
+
+
+async def chat_endpoint(query, company_information_list, chat_history, is_final=False,
+                        instruction=None):
     company_information = _join_information(company_information_list)
     history_str = _build_history(chat_history) if is_final else ""
 
-    if is_final:
+    if instruction:
+        developer_instruction = instruction
+        if history_str:
+            developer_instruction += f"\n\nPrevious conversation:\n{history_str}"
+        max_tokens = MAX_TOKENS_FINAL
+        temperature = 0.3
+    elif is_final:
         developer_instruction = _final_instruction(history_str)
         max_tokens = MAX_TOKENS_FINAL
         temperature = 0.4          # some latitude for the written analysis
