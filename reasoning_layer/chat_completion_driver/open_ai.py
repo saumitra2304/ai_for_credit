@@ -138,8 +138,8 @@ CREDIT_INSTRUCTION = (
 )
 
 
-async def chat_endpoint(query, company_information_list, chat_history, is_final=False,
-                        instruction=None):
+async def chat_endpoint_stream(query, company_information_list, chat_history, is_final=False,
+                               instruction=None):
     company_information = _join_information(company_information_list)
     history_str = _build_history(chat_history) if is_final else ""
 
@@ -152,11 +152,11 @@ async def chat_endpoint(query, company_information_list, chat_history, is_final=
     elif is_final:
         developer_instruction = _final_instruction(history_str)
         max_tokens = MAX_TOKENS_FINAL
-        temperature = 0.4          # some latitude for the written analysis
+        temperature = 0.4
     else:
         developer_instruction = EXTRACT_INSTRUCTION
         max_tokens = MAX_TOKENS_EXTRACT
-        temperature = 0.1          # extraction must not paraphrase or invent
+        temperature = 0.1
 
     user_content = f"{query}\n\nCompany Data:\n{company_information}"
 
@@ -164,26 +164,21 @@ async def chat_endpoint(query, company_information_list, chat_history, is_final=
     _log(f"[llm final={is_final} chars={total_chars} ~tokens={total_chars // 4} "
          f"max_out={max_tokens}]")
     if total_chars > CHAR_BUDGET:
-        # Past this point Ollama silently discards the oldest half of the KV
-        # cache and re-processes, which is the multi-minute stall with no output.
         _log(f"[llm WARNING payload exceeds {CHAR_BUDGET} chars; a context "
              f"shift is likely. Reduce the input rather than raising num_ctx.]")
 
-    # Qwen3 handles the system role properly. The single-user-message
-    # workaround was for Gemma and is no longer needed.
     messages = [
         {"role": "system", "content": developer_instruction},
         {"role": "user", "content": user_content},
     ]
 
-    pieces = []
     try:
         stream = await client.chat.completions.create(
             model=MODEL_NAME,
             messages=messages,
             max_tokens=max_tokens,
             temperature=temperature,
-            stream=True,          # so you can see progress instead of waiting blind
+            stream=True,
         )
         async for chunk in stream:
             if not chunk.choices:
@@ -191,9 +186,7 @@ async def chat_endpoint(query, company_information_list, chat_history, is_final=
             delta = chunk.choices[0].delta
             text = getattr(delta, "content", None)
             if text:
-                pieces.append(text)
-                print(text, end="", file=sys.stderr, flush=True)
-        print("", file=sys.stderr, flush=True)
+                yield text
     except asyncio.CancelledError:
         _log("[llm cancelled]")
         raise
@@ -201,10 +194,17 @@ async def chat_endpoint(query, company_information_list, chat_history, is_final=
         _log(f"[llm error {type(exc).__name__}: {exc}]")
         raise
 
-    raw = "".join(pieces)
 
-    # Keep reasoning out of the extraction output: it would otherwise be fed
-    # forward into the final prompt as if it were data.
+async def chat_endpoint(query, company_information_list, chat_history, is_final=False,
+                        instruction=None):
+    pieces = []
+    async for text in chat_endpoint_stream(
+        query, company_information_list, chat_history, is_final=is_final,
+        instruction=instruction,
+    ):
+        pieces.append(text)
+
+    raw = "".join(pieces)
     response_content = strip_thinking(raw) if not is_final else (raw or "").strip()
 
     _log(f"[llm done chars_out={len(response_content)} "

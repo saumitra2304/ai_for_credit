@@ -39,3 +39,7 @@ async def update_chat(chat: chat_memory):
         {"user_id": chat.user_id, "chat_id": chat.chat_id},
         chat.model_dump()
     )
+
+async def get_chat_history(user_id):
+    chat_history = await collection.find({"user_id": user_id}).to_list(length=None)
+    return [chat_memory(**chat) for chat in chat_history]

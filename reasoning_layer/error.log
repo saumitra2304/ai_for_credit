@@ -115,3 +115,233 @@ Traceback (most recent call last):
     ...<7 lines>...
     )
 aiohttp.client_exceptions.ContentTypeError: 200, message='Attempt to decode JSON with unexpected mimetype: text/plain; charset=utf-8', url='http://localhost:3000/company_details?cin=U74999WB2011PTC166690'
+Traceback (most recent call last):
+  File "/Users/saumitrakarmakar/codes/ai_for_credit/reasoning_layer/main.py", line 135, in chat
+    final_answer = per_company_answers[0]
+                   ~~~~~~~~~~~~~~~~~~~^^^
+IndexError: list index out of range
+Traceback (most recent call last):
+  File "/opt/homebrew/lib/python3.14/site-packages/httpx2/_transports/default.py", line 98, in map_httpcore_exceptions
+    yield
+  File "/opt/homebrew/lib/python3.14/site-packages/httpx2/_transports/default.py", line 388, in handle_async_request
+    resp = await self._pool.handle_async_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/lib/python3.14/site-packages/httpcore2/_async/connection_pool.py", line 242, in handle_async_request
+    raise exc from None
+  File "/opt/homebrew/lib/python3.14/site-packages/httpcore2/_async/connection_pool.py", line 224, in handle_async_request
+    response = await connection.handle_async_request(pool_request.request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/lib/python3.14/site-packages/httpcore2/_async/connection.py", line 94, in handle_async_request
+    raise exc
+  File "/opt/homebrew/lib/python3.14/site-packages/httpcore2/_async/connection.py", line 74, in handle_async_request
+    stream = await self._connect(request)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/lib/python3.14/site-packages/httpcore2/_async/connection.py", line 117, in _connect
+    stream = await self._network_backend.connect_tcp(**kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/lib/python3.14/site-packages/httpcore2/_backends/auto.py", line 31, in connect_tcp
+    return await self._backend.connect_tcp(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+    )
+    ^
+  File "/opt/homebrew/lib/python3.14/site-packages/httpcore2/_backends/anyio.py", line 115, in connect_tcp
+    with map_exceptions(exc_map):
+         ~~~~~~~~~~~~~~^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/opt/homebrew/lib/python3.14/site-packages/httpcore2/_exceptions.py", line 17, in map_exceptions
+    raise to_exc(exc) from exc
+httpcore2.ConnectError: All connection attempts failed
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/homebrew/lib/python3.14/site-packages/openai/_base_client.py", line 1713, in request
+    response = await self._send_request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/opt/homebrew/lib/python3.14/site-packages/openai/_client.py", line 1226, in _send_request
+    response = await self._send_with_auth_retry(request, stream=stream, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/lib/python3.14/site-packages/openai/_client.py", line 1205, in _send_with_auth_retry
+    response = await super()._send_request(request, stream=stream, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/lib/python3.14/site-packages/openai/_base_client.py", line 1632, in _send_request
+    return await self._client.send(request, stream=stream, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/lib/python3.14/site-packages/httpx2/_client.py", line 1813, in send
+    response = await self._send_handling_auth(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/opt/homebrew/lib/python3.14/site-packages/httpx2/_client.py", line 1841, in _send_handling_auth
+    response = await self._send_handling_redirects(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/opt/homebrew/lib/python3.14/site-packages/httpx2/_client.py", line 1876, in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/lib/python3.14/site-packages/httpx2/_client.py", line 1910, in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/lib/python3.14/site-packages/httpx2/_transports/default.py", line 387, in handle_async_request
+    with map_httpcore_exceptions():
+         ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/opt/homebrew/lib/python3.14/site-packages/httpx2/_transports/default.py", line 115, in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+httpx2.ConnectError: All connection attempts failed
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/saumitrakarmakar/codes/ai_for_credit/reasoning_layer/main.py", line 254, in credit_tool
+    answer = await chat_endpoint(
+             ^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+    )
+    ^
+  File "/Users/saumitrakarmakar/codes/ai_for_credit/reasoning_layer/chat_completion_driver/open_ai.py", line 181, in chat_endpoint
+    stream = await client.chat.completions.create(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+    )
+    ^
+  File "/opt/homebrew/lib/python3.14/site-packages/openai/resources/chat/completions/completions.py", line 2907, in create
+    return await self._post(
+           ^^^^^^^^^^^^^^^^^
+    ...<55 lines>...
+    )
+    ^
+  File "/opt/homebrew/lib/python3.14/site-packages/openai/_base_client.py", line 1996, in post
+    return await self.request(cast_to, opts, stream=stream, stream_cls=stream_cls)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/lib/python3.14/site-packages/openai/_base_client.py", line 1748, in request
+    raise APIConnectionError(request=request) from err
+openai.APIConnectionError: Connection error.
+Traceback (most recent call last):
+  File "/opt/homebrew/lib/python3.14/site-packages/httpx2/_transports/default.py", line 98, in map_httpcore_exceptions
+    yield
+  File "/opt/homebrew/lib/python3.14/site-packages/httpx2/_transports/default.py", line 388, in handle_async_request
+    resp = await self._pool.handle_async_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/lib/python3.14/site-packages/httpcore2/_async/connection_pool.py", line 242, in handle_async_request
+    raise exc from None
+  File "/opt/homebrew/lib/python3.14/site-packages/httpcore2/_async/connection_pool.py", line 224, in handle_async_request
+    response = await connection.handle_async_request(pool_request.request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/lib/python3.14/site-packages/httpcore2/_async/connection.py", line 94, in handle_async_request
+    raise exc
+  File "/opt/homebrew/lib/python3.14/site-packages/httpcore2/_async/connection.py", line 74, in handle_async_request
+    stream = await self._connect(request)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/lib/python3.14/site-packages/httpcore2/_async/connection.py", line 117, in _connect
+    stream = await self._network_backend.connect_tcp(**kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/lib/python3.14/site-packages/httpcore2/_backends/auto.py", line 31, in connect_tcp
+    return await self._backend.connect_tcp(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+    )
+    ^
+  File "/opt/homebrew/lib/python3.14/site-packages/httpcore2/_backends/anyio.py", line 115, in connect_tcp
+    with map_exceptions(exc_map):
+         ~~~~~~~~~~~~~~^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/opt/homebrew/lib/python3.14/site-packages/httpcore2/_exceptions.py", line 17, in map_exceptions
+    raise to_exc(exc) from exc
+httpcore2.ConnectError: All connection attempts failed
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/homebrew/lib/python3.14/site-packages/openai/_base_client.py", line 1713, in request
+    response = await self._send_request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/opt/homebrew/lib/python3.14/site-packages/openai/_client.py", line 1226, in _send_request
+    response = await self._send_with_auth_retry(request, stream=stream, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/lib/python3.14/site-packages/openai/_client.py", line 1205, in _send_with_auth_retry
+    response = await super()._send_request(request, stream=stream, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/lib/python3.14/site-packages/openai/_base_client.py", line 1632, in _send_request
+    return await self._client.send(request, stream=stream, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/lib/python3.14/site-packages/httpx2/_client.py", line 1813, in send
+    response = await self._send_handling_auth(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/opt/homebrew/lib/python3.14/site-packages/httpx2/_client.py", line 1841, in _send_handling_auth
+    response = await self._send_handling_redirects(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/opt/homebrew/lib/python3.14/site-packages/httpx2/_client.py", line 1876, in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/lib/python3.14/site-packages/httpx2/_client.py", line 1910, in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/lib/python3.14/site-packages/httpx2/_transports/default.py", line 387, in handle_async_request
+    with map_httpcore_exceptions():
+         ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/opt/homebrew/lib/python3.14/site-packages/httpx2/_transports/default.py", line 115, in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+httpx2.ConnectError: All connection attempts failed
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/saumitrakarmakar/codes/ai_for_credit/reasoning_layer/main.py", line 86, in chat
+    credit_answer = await credit_tool(
+                    ^^^^^^^^^^^^^^^^^^
+        request, results=results, chat_history=chat_history, persist=False
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/saumitrakarmakar/codes/ai_for_credit/reasoning_layer/main.py", line 276, in credit_tool
+    raise e
+  File "/Users/saumitrakarmakar/codes/ai_for_credit/reasoning_layer/main.py", line 254, in credit_tool
+    answer = await chat_endpoint(
+             ^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+    )
+    ^
+  File "/Users/saumitrakarmakar/codes/ai_for_credit/reasoning_layer/chat_completion_driver/open_ai.py", line 181, in chat_endpoint
+    stream = await client.chat.completions.create(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+    )
+    ^
+  File "/opt/homebrew/lib/python3.14/site-packages/openai/resources/chat/completions/completions.py", line 2907, in create
+    return await self._post(
+           ^^^^^^^^^^^^^^^^^
+    ...<55 lines>...
+    )
+    ^
+  File "/opt/homebrew/lib/python3.14/site-packages/openai/_base_client.py", line 1996, in post
+    return await self.request(cast_to, opts, stream=stream, stream_cls=stream_cls)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/lib/python3.14/site-packages/openai/_base_client.py", line 1748, in request
+    raise APIConnectionError(request=request) from err
+openai.APIConnectionError: Connection error.
