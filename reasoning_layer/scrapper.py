@@ -10,8 +10,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 SEARCH_API_KEY = os.getenv("SEARCH_API_KEY")
-if not SEARCH_API_KEY:
-    raise RuntimeError("SEARCH_API_KEY is not set — check your .env file")
 
 SEARCH_URL = "https://www.searchapi.io/api/v1/search"
 
@@ -28,11 +26,22 @@ def strip_blobs(obj: Any) -> Any:
     return obj
 
 
-async def company_details(
+async def fetch_news(
+    client: ClientSession,
+    queries: List[str],
+    semaphore: asyncio.Semaphore,
+) -> List[Dict[str, Any]]:
+    tasks = [_fetch_one(client, q, semaphore) for q in queries]
+    return await asyncio.gather(*tasks)
+
+
+async def _fetch_one(
     client: ClientSession,
     query: str,
     semaphore: asyncio.Semaphore,
 ) -> Dict[str, Any]:
+    if not SEARCH_API_KEY:
+        return {"query": query, "error": True, "organic_results": []}
     params = {
         "engine": "google_news",
         "q": query,
@@ -60,8 +69,7 @@ async def main(queries: List[str]) -> List[Dict[str, Any]]:
     semaphore = asyncio.Semaphore(5)
     timeout = aiohttp.ClientTimeout(total=45)  # cold calls can take ~13s
     async with aiohttp.ClientSession(timeout=timeout) as client:
-        tasks = [company_details(client, q, semaphore) for q in queries]
-        return await asyncio.gather(*tasks)
+        return await fetch_news(client, queries, semaphore)
 
 
 def print_results(results: List[Dict[str, Any]]) -> None:

@@ -5,20 +5,22 @@ from fastapi.responses import StreamingResponse
 import asyncio
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
-from chat_completion_driver.open_ai import chat_endpoint_stream, CREDIT_INSTRUCTION
+from chat_completion_driver.open_ai import chat_endpoint_stream, CREDIT_INSTRUCTION, NEWS_INSTRUCTION
 from sme_api.insta_summary_f import insta_summary
 from pydantic import BaseModel
 from mongo_driver.chat_db import get_chat, create_chat, update_chat, get_chat_history
 from sme_api.probe24_comp_details import company_details
 from financial_flatten import flatten_company
 from credit_flatten import flatten_credit
+from news_flatten import fetch_company_news, flatten_news
 
 load_dotenv()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.semaphore_sme_financials = asyncio.Semaphore(10)
-    app.state.client = aiohttp.ClientSession() 
+    app.state.semaphore_news = asyncio.Semaphore(5)
+    app.state.client = aiohttp.ClientSession()
     yield
     await app.state.client.close()
 
@@ -97,6 +99,14 @@ async def _chat_stream(request: ChatRequest):
         credit_answer += chunk
         yield _emit(chunk)
 
+    yield _emit("\n\n---\n\n# Per-Company News\n\n")
+    news_answer = ""
+    async for chunk in news_tool_stream(
+        request, results=results, chat_history=chat_history, client=client
+    ):
+        news_answer += chunk
+        yield _emit(chunk)
+
     detail_started = False
     for entry in results:
         label = _company_label(entry)
@@ -164,9 +174,45 @@ async def _chat_stream(request: ChatRequest):
         "# Answer\n\n" + final_answer
         + "\n\n---\n\n# Per-Company Credit Answer\n\n"
         + credit_answer
+        + "\n\n---\n\n# Per-Company News\n\n"
+        + news_answer
         + "\n\n---\n\n# Per-Company Detail\n\n"
         + "\n\n---\n\n".join(sections)
     )
+
+    chat_history.message_trail.append(
+        {"query": request.query, "response": chat_response}
+    )
+    if len(chat_history.message_trail) > 2:
+        chat_history.message_trail = chat_history.message_trail[-2:]
+    await update_chat(chat_history)
+    print("", file=sys.stderr, flush=True)
+
+
+async def _news_stream(request: ChatRequest):
+    semaphore = app.state.semaphore_sme_financials
+    client = app.state.client
+
+    chat_history = await get_chat(request.user_id, request.chat_id)
+    if chat_history == 0:
+        chat_history = await create_chat(
+            request.user_id, request.chat_id, request.cin_list, request.query
+        )
+    if not isinstance(chat_history.sme_data, dict):
+        chat_history.sme_data = {}
+
+    yield _emit("Loading company data...\n")
+    results = await _load_results(request, chat_history, client, semaphore)
+
+    chat_response = ""
+    async for chunk in news_tool_stream(
+        request, results=results, chat_history=chat_history, client=client
+    ):
+        chat_response += chunk
+        yield _emit(chunk)
+
+    if not chat_response.strip():
+        raise ValueError(f"No usable data for {request.cin_list}")
 
     chat_history.message_trail.append(
         {"query": request.query, "response": chat_response}
@@ -245,6 +291,31 @@ async def chat(request: ChatRequest):
         raise e
 
 
+@app.post("/news")
+async def news(request: ChatRequest):
+    async def stream():
+        try:
+            async for chunk in _news_stream(request):
+                yield chunk
+        except Exception as e:
+            import traceback
+            with open("error.log", "a", encoding="utf-8") as f:
+                traceback.print_exc(file=f)
+            raise e
+
+    if request.stream:
+        return StreamingResponse(
+            stream(), media_type="text/plain; charset=utf-8", headers=STREAM_HEADERS
+        )
+    try:
+        return await _collect(_news_stream(request))
+    except Exception as e:
+        import traceback
+        with open("error.log", "a", encoding="utf-8") as f:
+            traceback.print_exc(file=f)
+        raise e
+
+
 @app.post("/credit")
 async def credit(request: ChatRequest):
     async def stream():
@@ -268,6 +339,47 @@ async def credit(request: ChatRequest):
         with open("error.log", "a", encoding="utf-8") as f:
             traceback.print_exc(file=f)
         raise e
+
+async def news_tool_stream(request, results=None, chat_history=None, client=None):
+    if chat_history is None:
+        chat_history = await get_chat(request.user_id, request.chat_id)
+        if chat_history == 0:
+            chat_history = await create_chat(
+                request.user_id, request.chat_id, request.cin_list, request.query
+            )
+        if not isinstance(chat_history.sme_data, dict):
+            chat_history.sme_data = {}
+
+    if results is None:
+        semaphore = app.state.semaphore_sme_financials
+        if client is None:
+            client = app.state.client
+        results = await _load_results(request, chat_history, client, semaphore)
+
+    if not results:
+        raise ValueError(f"No usable data for {request.cin_list}")
+
+    if client is None:
+        client = app.state.client
+    news_sem = app.state.semaphore_news
+
+    for i, entry in enumerate(results):
+        if i:
+            yield "\n\n---\n\n"
+        label = _company_label(entry)
+        company = (entry.get("data", {}) or {}).get("company", {}) or {}
+        name = company.get("legal_name") or label
+
+        categories = await fetch_company_news(client, name, news_sem)
+        flat = flatten_news(label, categories)
+        query = f"{request.query}\n\n(This call covers only: {label}.)"
+        yield f"## {label}\n\n"
+        async for chunk in chat_endpoint_stream(
+            query, [flat], chat_history, is_final=True,
+            instruction=NEWS_INSTRUCTION,
+        ):
+            yield chunk
+
 
 async def credit_tool_stream(request: ChatRequest, results=None, chat_history=None):
     if chat_history is None:

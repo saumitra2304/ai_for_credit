@@ -120,6 +120,19 @@ def _final_instruction(history_str):
     )
 
 
+NEWS_INSTRUCTION = (
+    "You are a news analyst covering Indian corporates.\n"
+    "The user message contains Google News results in three buckets: "
+    "general_news, financial_news, legal_news.\n"
+    "Write a clear summary of what IS in the articles — headline themes, "
+    "dates, sources, and credit-relevant signals (litigation, fraud claims, "
+    "earnings misses, rating actions, management issues).\n\n"
+    "Separate your answer into three short sections: General, Financial, Legal. "
+    "If a bucket has no articles, say so once. Do not invent stories.\n"
+    "/no_think"
+)
+
+
 CREDIT_INSTRUCTION = (
     "You are a credit-rating and distress analyst for Indian corporates.\n"
     "The user message contains the full credit/distress JSON for one company. "
