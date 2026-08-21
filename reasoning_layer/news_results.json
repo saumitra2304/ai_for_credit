@@ -1,0 +1,123 @@
+[
+  {
+    "search_metadata": {
+      "id": "search_K0EOpDkpY6h78Npyge3wzYN9",
+      "status": "Success",
+      "created_at": "2026-08-21T10:32:31Z",
+      "request_time_taken": 2.18,
+      "parsing_time_taken": 0.01,
+      "total_time_taken": 2.19,
+      "request_url": "https://www.google.com/search?q=godrej+properties+limited&oq=godrej+properties+limited&gl=in&hl=en&uule=w+CAIQICIFSW5kaWE&tbm=nws&tbs=&ie=UTF-8",
+      "html_url": "https://www.searchapi.io/api/v1/searches/search_K0EOpDkpY6h78Npyge3wzYN9.html",
+      "json_url": "https://www.searchapi.io/api/v1/searches/search_K0EOpDkpY6h78Npyge3wzYN9"
+    },
+    "search_parameters": {
+      "engine": "google_news",
+      "q": "godrej properties limited",
+      "device": "desktop",
+      "location": "India",
+      "location_used": "India",
+      "hl": "en",
+      "gl": "in"
+    },
+    "search_information": {
+      "query_displayed": "godrej properties limited",
+      "total_results": 300,
+      "time_taken_displayed": 0.35,
+      "detected_location": "India",
+      "has_no_results_for": false
+    },
+    "organic_results": [
+      {
+        "position": 1,
+        "title": "After BPTP & Raheja Builder Now Its Godrej Properties With Canara Scamming With Real Estate Buyers",
+        "link": "https://www.inventiva.co.in/trends/after-bptp-raheja-builder-now-its-godrej-properties-with-canara-scamming-with-real-estate-buyers/",
+        "source": "Inventiva",
+        "date": "9 hours ago",
+        "iso_date": "2026-08-21T01:46:07Z",
+        "snippet": "In the high-stakes ecosystem of National Capital Region real estate, where under-construction towers rise on the promise of homeownership..."
+      },
+      {
+        "position": 2,
+        "title": "Godrej Properties shares fall 2.05% in early trade",
+        "link": "https://www.tradingview.com/news/moneycontrol:a486d72ca094b:0-godrej-properties-shares-fall-2-05-in-early-trade/",
+        "source": "TradingView",
+        "date": "3 days ago",
+        "iso_date": "2026-08-18T06:45:00Z",
+        "snippet": "Godrej Properties Ltd. saw its stock price decline by 2.05% to Rs 2011.90 at 09:23 am on Tuesday. This movement places Godrej Properties..."
+      },
+      {
+        "position": 3,
+        "title": "Godrej Properties Ltd. Share Price Today: Price Action View",
+        "link": "https://univest.in/blogs/why-godrej-properties-ltd-share-price-rise-2026-08-17",
+        "source": "Univest",
+        "date": "4 days ago",
+        "iso_date": "2026-08-17T10:12:00Z",
+        "snippet": "Godrej Properties Ltd. Share Price rose 3.24% to Rs 2056. Read price action, volume trends, market cap context, sector and peer analysis."
+      },
+      {
+        "position": 4,
+        "title": "Revenue Miss: Godrej Properties Limited Fell 52% Short Of Analyst Revenue Estimates And Analysts Have Been Revising Their Models",
+        "link": "https://simplywall.st/stocks/in/real-estate-management-and-development/nse-godrejprop/godrej-properties-shares/news/revenue-miss-godrej-properties-limited-fell-52-short-of-anal",
+        "source": "Simply Wall Street",
+        "date": "2 weeks ago",
+        "iso_date": "2026-08-07T07:00:00Z",
+        "snippet": "The most optimistic Godrej Properties analyst has a price target of ₹3,000 per share, while the most pessimistic values it at ₹1,525. Note the..."
+      },
+      {
+        "position": 5,
+        "title": "Are DLF, Godrej Properties, Sobha, other realty stocks heading for a rally? Here is why analysts remain bu",
+        "link": "https://m.economictimes.com/markets/stocks/news/are-dlf-godrej-properties-sobha-other-realty-stocks-heading-for-a-rally-here-is-why-analysts-remain-bullish/articleshow/133391783.cms",
+        "source": "The Economic Times",
+        "date": "7 hours ago",
+        "iso_date": "2026-08-21T03:23:09Z",
+        "snippet": "Despite a weak Q1 and recent market fluctuations, analysts remain bullish on real estate stocks. Driven by low inventory, robust pre-sales..."
+      },
+      {
+        "position": 6,
+        "title": "Godrej Properties Number of Employees 2026 | Employee Count & Headcount Data",
+        "link": "https://www.reveliolabs.com/companies/godrej-properties/employees",
+        "source": "Revelio Labs",
+        "date": "3 weeks ago",
+        "iso_date": "2026-07-28T17:26:01Z",
+        "snippet": "Godrej Properties Ltd. (533150) is a Real Estate and Development company that employs 7,755 people worldwide as of March 2026."
+      },
+      {
+        "position": 7,
+        "title": "Godrej Properties seeks shareholder nod for Pirojsha Godrej chairperson role",
+        "link": "https://scanx.trade/stock-market-news/companies/godrej-properties-seeks-shareholder-nod-pirojsha-godrej-chairperson/48753600",
+        "source": "scanx.trade",
+        "date": "1 day ago",
+        "iso_date": "2026-08-20T07:03:13Z",
+        "snippet": "Godrej Properties Limited has initiated a postal ballot to approve the re-designation of Pirojsha Godrej as Non-Executive Non-Independent..."
+      },
+      {
+        "position": 8,
+        "title": "Godrej Properties Ltd re-designates Pirojsha Godrej as NE Chairperson",
+        "link": "https://whispersinthecorridors.in/news/godrej-properties-ltd-re-designates-pirojsha-godrej-as-ne-chairperson",
+        "source": "Whispers in the Corridors",
+        "date": "1 week ago",
+        "iso_date": "2026-08-14T05:17:42Z",
+        "snippet": "Pirojsha Godrej has been re-designated from Whole-Time Director, designated as Executive Chairperson, to Non-Executive Non-Independent..."
+      },
+      {
+        "position": 9,
+        "title": "Godrej Properties Q1 Net Profit Drops To ₹350 Crore YoY, Approves Corporate Merger",
+        "link": "https://www.sahi.com/news/godrej-properties-q1-net-profit-drops-to-350-crore-yoy-approves-corporate-merger-3079-PE1_COR",
+        "source": "Sahi",
+        "date": "2 weeks ago",
+        "iso_date": "2026-08-04T07:00:00Z",
+        "snippet": "Godrej Properties' Q1 FY27 consolidated net profit fell to ₹350 crore from ₹600 crore in the previous year's corresponding quarter due to..."
+      },
+      {
+        "position": 10,
+        "title": "Godrej Properties Q1 profit falls 42% despite 22% rise in bookings",
+        "link": "https://www.thehindubusinessline.com/news/real-estate/godrej-properties-q1-profit-drops-42-despite-strong-booking-growth/article71305144.ece",
+        "source": "BusinessLine",
+        "date": "2 weeks ago",
+        "iso_date": "2026-08-08T07:00:00Z",
+        "snippet": "Godrej Properties Limited reported a sharp decline in profitability for the first quarter of the financial year 2027, with net profit after..."
+      }
+    ]
+  }
+]
