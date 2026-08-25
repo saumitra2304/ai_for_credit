@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
+import { BrowserRouter, HashRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { LeftSidebar } from '@/components/LeftSidebar'
@@ -9,6 +9,8 @@ import { RegisterPage } from '@/pages/RegisterPage'
 import { useHydrateSession } from '@/hooks/useHydrateSession'
 import { setUnauthorizedHandler } from '@/api/client'
 import { useAuthStore } from '@/store/useAuthStore'
+import { OllamaGate } from '@/components/OllamaGate'
+import { getRuntimeConfig } from '@/lib/runtime'
 
 function MainApp() {
   useHydrateSession()
@@ -74,39 +76,43 @@ function GuestRoute({ children }) {
 }
 
 export default function App() {
+  const Router = getRuntimeConfig().desktop ? HashRouter : BrowserRouter
+
   return (
     <TooltipProvider delayDuration={200}>
-      <BrowserRouter>
-        <AuthBootstrap>
-          <Routes>
-            <Route
-              path="/login"
-              element={
-                <GuestRoute>
-                  <LoginPage />
-                </GuestRoute>
-              }
-            />
-            <Route
-              path="/register"
-              element={
-                <GuestRoute>
-                  <RegisterPage />
-                </GuestRoute>
-              }
-            />
-            <Route
-              path="/"
-              element={
-                <ProtectedRoute>
-                  <MainApp />
-                </ProtectedRoute>
-              }
-            />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </AuthBootstrap>
-      </BrowserRouter>
+      <Router>
+        <OllamaGate>
+          <AuthBootstrap>
+            <Routes>
+              <Route
+                path="/login"
+                element={
+                  <GuestRoute>
+                    <LoginPage />
+                  </GuestRoute>
+                }
+              />
+              <Route
+                path="/register"
+                element={
+                  <GuestRoute>
+                    <RegisterPage />
+                  </GuestRoute>
+                }
+              />
+              <Route
+                path="/"
+                element={
+                  <ProtectedRoute>
+                    <MainApp />
+                  </ProtectedRoute>
+                }
+              />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </AuthBootstrap>
+        </OllamaGate>
+      </Router>
     </TooltipProvider>
   )
 }

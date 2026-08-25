@@ -1,0 +1,21 @@
+[package]
+name = "kuber"
+version = "0.1.0"
+description = "Kuber credit intelligence"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+dotenvy = "0.15"
+reqwest = { version = "0.13", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sme_financial_apis = { path = "../.." }
+tauri = { version = "2", features = [] }
+tokio = { version = "1", features = ["full"] }
+uuid = { version = "1", features = ["v4"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

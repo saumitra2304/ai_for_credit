@@ -34,6 +34,10 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/api\/search/, ''),
       },
+      '/api/ollama': {
+        target: 'http://127.0.0.1:3000',
+        changeOrigin: true,
+      },
       '/api/chat_history': {
         target: 'http://127.0.0.1:8001',
         changeOrigin: true,

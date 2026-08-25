@@ -1,3 +1,5 @@
+import { apiUrl, withInternalHeaders } from '@/lib/runtime'
+
 const SEARCH_BASE = '/api/search/search_company'
 
 export async function searchCompanies(query, limit = 25) {
@@ -8,7 +10,9 @@ export async function searchCompanies(query, limit = 25) {
     })
   )
 
-  const response = await fetch(`${SEARCH_BASE}?limit=${limit}&filters=${filters}`)
+  const response = await fetch(apiUrl(`${SEARCH_BASE}?limit=${limit}&filters=${filters}`), {
+    headers: withInternalHeaders(),
+  })
 
   if (!response.ok) {
     throw new Error(`Search failed: ${response.statusText}`)

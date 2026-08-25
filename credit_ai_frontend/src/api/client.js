@@ -1,4 +1,5 @@
 import { clearToken, getToken } from '@/lib/authStorage'
+import { apiUrl, withInternalHeaders } from '@/lib/runtime'
 
 export class UnauthorizedError extends Error {
   constructor(message = 'Unauthorized') {
@@ -15,7 +16,7 @@ export function setUnauthorizedHandler(handler) {
 
 export async function authFetch(url, options = {}) {
   const token = getToken()
-  const headers = new Headers(options.headers ?? {})
+  const headers = withInternalHeaders(options.headers)
 
   if (token) {
     headers.set('Authorization', `Bearer ${token}`)
@@ -25,7 +26,7 @@ export async function authFetch(url, options = {}) {
     headers.set('Content-Type', 'application/json')
   }
 
-  const response = await fetch(url, { ...options, headers })
+  const response = await fetch(apiUrl(url), { ...options, headers })
 
   if (response.status === 401) {
     clearToken()

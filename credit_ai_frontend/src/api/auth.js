@@ -1,5 +1,6 @@
 import { authFetch } from '@/api/client'
 import { setToken } from '@/lib/authStorage'
+import { apiUrl, withInternalHeaders } from '@/lib/runtime'
 
 const AUTH_BASE = '/api/auth'
 
@@ -26,9 +27,9 @@ async function parseErrorResponse(response) {
 }
 
 export async function register({ email, password, displayName }) {
-  const response = await fetch(`${AUTH_BASE}/register`, {
+  const response = await fetch(apiUrl(`${AUTH_BASE}/register`), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: withInternalHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       email,
       password,
@@ -44,9 +45,9 @@ export async function register({ email, password, displayName }) {
 }
 
 export async function login({ email, password }) {
-  const response = await fetch(`${AUTH_BASE}/login`, {
+  const response = await fetch(apiUrl(`${AUTH_BASE}/login`), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: withInternalHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ email, password }),
   })
 
