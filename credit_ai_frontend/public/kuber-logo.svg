@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" fill="none">
+  <rect width="48" height="48" rx="12" fill="url(#kuber-bg)"/>
+  <path d="M14 34V14h4.2l7.8 11.2V14H30v20h-4.2L18 22.8V34H14z" fill="white" fill-opacity="0.95"/>
+  <path d="M32 14h3.5l5 12.5L45.5 14H49v20h-3.2V21.8L40.2 34h-3.1l-5.6-12.2V34H32V14z" fill="url(#kuber-accent)" transform="translate(-4 0) scale(0.92)"/>
+  <circle cx="38" cy="15" r="3" fill="#34D399" fill-opacity="0.9"/>
+  <defs>
+    <linearGradient id="kuber-bg" x1="0" y1="0" x2="48" y2="48">
+      <stop stop-color="#3B82F6"/>
+      <stop offset="1" stop-color="#059669"/>
+    </linearGradient>
+    <linearGradient id="kuber-accent" x1="32" y1="14" x2="48" y2="34">
+      <stop stop-color="#A7F3D0"/>
+      <stop offset="1" stop-color="#FFFFFF"/>
+    </linearGradient>
+  </defs>
+</svg>

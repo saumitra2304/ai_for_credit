@@ -47,6 +47,12 @@ CASH_FLOW = [
     "cash_flow_statement_at_end_of_period",
 ]
 
+# Caps keep probe extras inside the LLM char budget (see open_ai.CHAR_BUDGET).
+MAX_MSME_TREND_PERIODS = 4
+MAX_MSME_SUPPLIERS = 15
+MAX_LEGAL_CASES = 12
+MAX_LEGAL_FIELD_CHARS = 50
+
 
 def _fmt(v):
     """Blank for missing, plain integers where possible."""
@@ -55,6 +61,99 @@ def _fmt(v):
     if isinstance(v, float) and v.is_integer():
         return str(int(v))
     return str(v)
+
+
+def _clip(text, max_len=MAX_LEGAL_FIELD_CHARS):
+    text = (text or "").strip()
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 1] + "…"
+
+
+def _legal_priority(case):
+    score = 0
+    if case.get("case_status") == "Pending":
+        score += 1000
+    severity = (case.get("severity") or "").lower()
+    if severity == "high":
+        score += 100
+    elif severity == "medium":
+        score += 50
+    return (score, case.get("date") or "0000-01-01")
+
+
+def flatten_msme_delays(data, max_trend=MAX_MSME_TREND_PERIODS,
+                        max_suppliers=MAX_MSME_SUPPLIERS):
+    """Compact MSME trend + latest-period supplier delays (bounded)."""
+    msme = data.get("msme_supplier_payment_delays") or {}
+    lines = []
+
+    trend = msme.get("trend") or []
+    if trend:
+        lines.append("-- MSME PAYMENT DELAYS (trend) --")
+        for period in trend[-max_trend:]:
+            lines.append(
+                f"{period.get('period')} | total due {_fmt(period.get('amount'))}"
+            )
+
+    delays_for_period = msme.get("delays_for_period") or {}
+    supplier_delays = delays_for_period.get("delays") or []
+    if delays_for_period or supplier_delays:
+        lines.append("-- MSME SUPPLIER DELAYS (latest period) --")
+        lines.append(
+            f"Period {delays_for_period.get('latest_period')} | "
+            f"total due {_fmt(delays_for_period.get('total_amount_due_for_period'))}"
+        )
+        ranked = sorted(
+            supplier_delays,
+            key=lambda row: row.get("amount_due") or 0,
+            reverse=True,
+        )
+        for row in ranked[:max_suppliers]:
+            lines.append(
+                f"{_clip(row.get('supplier_name'), 60)} | "
+                f"due {_fmt(row.get('amount_due'))} | "
+                f"from {row.get('amount_due_from_date') or 'n/a'}"
+            )
+        omitted = len(supplier_delays) - max_suppliers
+        if omitted > 0:
+            lines.append(f"... {omitted} more suppliers not shown")
+
+    return lines
+
+
+def flatten_legal_history(data, max_cases=MAX_LEGAL_CASES):
+    """Compact probe legal_history rows, prioritising pending/high-severity cases."""
+    legal = data.get("legal_history") or []
+    if not legal:
+        return []
+
+    pending = sum(1 for case in legal if case.get("case_status") == "Pending")
+    severe = sum(
+        1 for case in legal
+        if (case.get("severity") or "").lower() in ("high", "medium")
+    )
+    lines = [
+        "-- LITIGATION (Probe legal_history) -- "
+        f"total {len(legal)} | pending {pending} | medium-or-high severity {severe}"
+    ]
+
+    ranked = sorted(legal, key=_legal_priority, reverse=True)
+    for case in ranked[:max_cases]:
+        lines.append(
+            f"{case.get('date') or 'n/a'} | {case.get('case_status')} | "
+            f"{case.get('severity')} | {_clip(case.get('court'), 40)} | "
+            f"{case.get('case_number')} | {case.get('case_category')} | "
+            f"{_clip(case.get('petitioner'))} v {_clip(case.get('respondent'))}"
+        )
+
+    omitted = len(legal) - max_cases
+    if omitted > 0:
+        lines.append(
+            f"... {omitted} more cases not shown "
+            "(pending / high-severity cases shown first)"
+        )
+    return lines
 
 
 def _rows(label_prefix, keys, per_year, getter):
@@ -137,20 +236,8 @@ def flatten_company(entry, nature="STANDALONE", years=("2025", "2024", "2023")):
         out.append("-- PROBE SCORES (1-5) --")
         out.append(" | ".join(f"{k}={v}" for k, v in score.items()))
 
-    msme = (data.get("msme_supplier_payment_delays") or {}).get("trend") or []
-    if msme:
-        out.append("-- MSME PAYMENT DELAYS --")
-        for t in msme[-4:]:
-            out.append(f"{t.get('period')} | {_fmt(t.get('amount'))}")
-
-    legal = data.get("legal_history") or []
-    if legal:
-        pending = sum(1 for c in legal if c.get("case_status") == "Pending")
-        severe = sum(1 for c in legal if c.get("severity") in ("high", "medium"))
-        out.append(
-            f"-- LITIGATION -- total {len(legal)} | pending {pending} | "
-            f"medium-or-high severity {severe}"
-        )
+    out.extend(flatten_msme_delays(data))
+    out.extend(flatten_legal_history(data))
 
     ratings = data.get("credit_ratings") or []
     out.append(f"-- CREDIT RATINGS -- {'none on record' if not ratings else len(ratings)}")

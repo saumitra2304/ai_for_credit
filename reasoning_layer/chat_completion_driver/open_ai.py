@@ -22,7 +22,8 @@ MODEL_NAME = os.getenv("OPENAI_MODEL_NAME", "qwen3:8b")
 # Output caps. Without these a confused model generates until it hits the
 # context ceiling, which is what turned one extraction call into 16 minutes.
 MAX_TOKENS_EXTRACT = 1200
-MAX_TOKENS_FINAL = 4000
+MAX_TOKENS_AGENT = 4000       # credit / news custom-instruction calls
+MAX_TOKENS_FINAL = 8000       # is_final financial analysis only
 
 # ~4 chars per token. 32k context minus room for the response.
 CHAR_BUDGET = 100_000
@@ -93,6 +94,21 @@ EXTRACT_INSTRUCTION = (
 )
 
 
+FOLLOWUP_INSTRUCTION = (
+    "You are a credit analyst continuing an existing conversation about Indian "
+    "corporates.\n"
+    "The user is asking a follow-up question. Answer ONLY what they asked — "
+    "be direct and specific.\n\n"
+    "Do NOT reproduce financial summary tables, full trend-analysis write-ups, "
+    "credit rating dumps, or news recaps already covered in the previous "
+    "conversation. Do not restart with 'FINANCIAL SUMMARY TABLES' or similar "
+    "section headers unless the user explicitly asks for tables again.\n\n"
+    "Use the company data below and the previous conversation for context. "
+    "Cite specific figures where relevant.\n"
+    "/no_think"
+)
+
+
 def _final_instruction(history_str):
     return (
         "You are an expert financial analyst specialising in SME and corporate "
@@ -110,7 +126,8 @@ def _final_instruction(history_str):
         "efficiency (inventory/debtor/payable days) across the years given. "
         "Cite the specific numbers you are reasoning from.\n\n"
         "3. CREDIT STRENGTHS AND RED FLAGS\n"
-        "   Bullet points. Each one anchored to a figure.\n\n"
+        "   Bullet points. Each one anchored to a figure. Include MSME payment "
+        "delays and material litigation from the data when present.\n\n"
         "4. RISK CONCLUSION\n"
         "   A short verdict with the two or three factors that drive it.\n\n"
         "Analyse whatever is provided. If credit ratings, director profiles or "
@@ -143,7 +160,8 @@ CREDIT_INSTRUCTION = (
     "withdrawn/unaccepted ratings, rated quantum vs latest_standalone_debt, "
     "and any mismatch between key_indicators.credit_rating and credit_ratings. "
     "Also cover defaulter_list, bifr_history, cdr_history, "
-    "legal_cases_of_financial_disputes.\n\n"
+    "legal_cases_of_financial_disputes, legal_history (individual court cases), "
+    "and msme_supplier_payment_delays (trend and supplier-level delays).\n\n"
     "Only note 'not in payload' for arrays/objects that are literally empty or "
     "null. Do not invent ratings. Quote agency, instrument, date, grade, "
     "outlook, and amounts when present.\n"
@@ -160,7 +178,7 @@ async def chat_endpoint_stream(query, company_information_list, chat_history, is
         developer_instruction = instruction
         if history_str:
             developer_instruction += f"\n\nPrevious conversation:\n{history_str}"
-        max_tokens = MAX_TOKENS_FINAL
+        max_tokens = MAX_TOKENS_AGENT
         temperature = 0.3
     elif is_final:
         developer_instruction = _final_instruction(history_str)

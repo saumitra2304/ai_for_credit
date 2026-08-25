@@ -2,7 +2,7 @@
 
 import json
 
-from financial_flatten import _fmt
+from financial_flatten import _fmt, flatten_legal_history, flatten_msme_delays
 
 CREDIT_FIELDS = (
     "credit_ratings",
@@ -51,5 +51,13 @@ def flatten_credit(entry):
     }
     for field in CREDIT_FIELDS:
         block[field] = data.get(field)
+
+    msme_lines = flatten_msme_delays(data)
+    if msme_lines:
+        block["msme_supplier_payment_delays"] = "\n".join(msme_lines)
+
+    legal_lines = flatten_legal_history(data)
+    if legal_lines:
+        block["legal_history"] = "\n".join(legal_lines)
 
     return json.dumps(block, indent=2, default=str)
