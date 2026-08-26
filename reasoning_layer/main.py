@@ -1,9 +1,10 @@
 import aiohttp
+import hmac
 import os
 import sys
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 import asyncio
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
@@ -13,19 +14,22 @@ from chat_completion_driver.open_ai import (
 )
 from sme_api.insta_summary_f import insta_summary
 from pydantic import BaseModel
-from mongo_driver.chat_db import get_chat, create_chat, update_chat, get_chat_history
+from sql_db.chat_store import get_chat, create_chat, update_chat, get_chat_history
 from sme_api.probe24_comp_details import company_details
 from financial_flatten import flatten_company
 from credit_flatten import flatten_credit
 from news_flatten import fetch_company_news, flatten_news
 from sql_db import auth_store
 from sql_db.db import init_db_sync
+from sql_db import settings_store
+from admin_routes import router as admin_router
 
 load_dotenv()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db_sync()
+    await settings_store.load_cache()
     bootstrap_email = os.getenv("AUTH_BOOTSTRAP_EMAIL")
     bootstrap_password = os.getenv("AUTH_BOOTSTRAP_PASSWORD")
     if bootstrap_email and bootstrap_password:
@@ -46,7 +50,8 @@ _cors_origins = [
     origin.strip()
     for origin in os.getenv(
         "CORS_ORIGINS",
-        "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173",
+        "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,"
+        "http://tauri.localhost,https://tauri.localhost,tauri://localhost",
     ).split(",")
     if origin.strip()
 ]
@@ -58,6 +63,29 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(auth_router)
+app.include_router(admin_router)
+
+
+def _internal_token_ok(got: str, expected: str) -> bool:
+    if len(got) != len(expected):
+        hmac.compare_digest(expected.encode("utf-8"), expected.encode("utf-8"))
+        return False
+    return hmac.compare_digest(got.encode("utf-8"), expected.encode("utf-8"))
+
+
+@app.middleware("http")
+async def require_internal_token(request: Request, call_next):
+    expected = os.getenv("INTERNAL_TOKEN", "")
+    if expected and request.method != "OPTIONS":
+        got = request.headers.get("x-internal-token", "")
+        if not _internal_token_ok(got, expected):
+            return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+    return await call_next(request)
+
+
+@app.get("/health")
+async def health():
+    return {"ok": True}
 
 class ChatRequest(BaseModel):
     cin_list: list[str]
@@ -665,3 +693,11 @@ async def chat_history(user_id: int = Depends(get_current_user_id)):
         with open("error.log", "a", encoding="utf-8") as f:
             traceback.print_exc(file=f)
         raise e
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    host = os.getenv("HOST", "127.0.0.1")
+    port = int(os.getenv("PORT", os.getenv("REASONING_PORT", "8001")))
+    uvicorn.run(app, host=host, port=port, log_level="info")

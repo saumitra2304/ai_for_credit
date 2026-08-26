@@ -1,3 +1,7 @@
+[workspace]
+members = [".", "credit_ai_frontend/src-tauri"]
+resolver = "2"
+
 [package]
 name = "sme_financial_apis"
 version = "0.1.0"
@@ -6,7 +10,10 @@ edition = "2024"
 [dependencies]
 axum = "0.8.9"
 dotenvy = "0.15.7"
-reqwest = { version = "0.13.4", features = ["json"] }
+reqwest = { version = "0.13.4", features = ["json", "stream"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 tokio = { version = "1.53.1", features = ["full"] }
+chrono = { version = "0.4", features = ["clock"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+tower-http = { version = "0.6", features = ["cors"] }

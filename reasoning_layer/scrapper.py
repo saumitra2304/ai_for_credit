@@ -1,6 +1,5 @@
 import asyncio
 import json
-import os
 from typing import Any, Dict, List
 
 import aiohttp
@@ -9,7 +8,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-SEARCH_API_KEY = os.getenv("SEARCH_API_KEY")
+from sql_db.settings_store import get_setting
 
 SEARCH_URL = "https://www.searchapi.io/api/v1/search"
 
@@ -40,7 +39,8 @@ async def _fetch_one(
     query: str,
     semaphore: asyncio.Semaphore,
 ) -> Dict[str, Any]:
-    if not SEARCH_API_KEY:
+    api_key = get_setting("SEARCH_API_KEY")
+    if not api_key:
         return {"query": query, "error": True, "organic_results": []}
     params = {
         "engine": "google_news",
@@ -48,7 +48,7 @@ async def _fetch_one(
         "location": "India",
         "gl": "in",
         "hl": "en",
-        "api_key": SEARCH_API_KEY,
+        "api_key": api_key,
     }
     async with semaphore:
         try:

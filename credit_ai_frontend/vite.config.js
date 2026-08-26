@@ -48,6 +48,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/api\/auth/, '/auth'),
       },
+      '/api/admin': {
+        target: 'http://127.0.0.1:8001',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/api\/admin/, '/admin'),
+      },
     },
   },
 })

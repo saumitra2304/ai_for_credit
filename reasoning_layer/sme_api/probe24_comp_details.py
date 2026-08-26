@@ -1,11 +1,15 @@
-import aiohttp
-from aiohttp import ClientSession
 from typing import Dict
+
+from aiohttp import ClientSession
+
+from sme_api.base import sme_headers, sme_url
+
 
 async def company_details(client: ClientSession, cin: str, semaphore) -> Dict:
     async with semaphore:
-        async with client.get(f"http://localhost:3000/company_details?cin={cin}") as resp:
+        async with client.get(
+            sme_url("/company_details"),
+            params={"cin": cin},
+            headers=sme_headers(),
+        ) as resp:
             return await resp.json()
-
-
-

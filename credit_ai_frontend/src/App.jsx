@@ -4,6 +4,7 @@ import { Loader2 } from 'lucide-react'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { LeftSidebar } from '@/components/LeftSidebar'
 import { ChatInterface } from '@/components/ChatInterface'
+import { AdminPage } from '@/pages/AdminPage'
 import { LoginPage } from '@/pages/LoginPage'
 import { RegisterPage } from '@/pages/RegisterPage'
 import { useHydrateSession } from '@/hooks/useHydrateSession'
@@ -75,6 +76,18 @@ function GuestRoute({ children }) {
   return children
 }
 
+function AdminApp() {
+  return (
+    <div className="relative flex h-screen overflow-hidden">
+      <div className="mesh-bg pointer-events-none absolute inset-0" />
+      <div className="relative flex h-full w-full">
+        <LeftSidebar />
+        <AdminPage />
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
   const Router = getRuntimeConfig().desktop ? HashRouter : BrowserRouter
 
@@ -105,6 +118,14 @@ export default function App() {
                 element={
                   <ProtectedRoute>
                     <MainApp />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin"
+                element={
+                  <ProtectedRoute>
+                    <AdminApp />
                   </ProtectedRoute>
                 }
               />

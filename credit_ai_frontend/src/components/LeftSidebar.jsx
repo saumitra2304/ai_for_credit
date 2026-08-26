@@ -1,4 +1,5 @@
-import { Building2, History } from 'lucide-react'
+import { Building2, History, Shield } from 'lucide-react'
+import { NavLink } from 'react-router-dom'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CompanySearch } from '@/components/CompanySearch'
 import { ChatHistory } from '@/components/ChatHistory'
@@ -51,6 +52,22 @@ export function LeftSidebar() {
           />
         </TabsContent>
       </Tabs>
+
+      <div className="border-t border-border/40 p-3">
+        <NavLink
+          to="/admin"
+          className={({ isActive }) =>
+            `flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium ${
+              isActive
+                ? 'bg-muted text-foreground'
+                : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+            }`
+          }
+        >
+          <Shield className="h-3.5 w-3.5" />
+          Admin
+        </NavLink>
+      </div>
     </aside>
   )
 }

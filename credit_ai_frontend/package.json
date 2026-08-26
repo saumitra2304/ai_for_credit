@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "desktop:dev": "tauri dev",
-    "desktop:build": "node src-tauri/scripts/bundle-env.mjs && tauri build --bundles app"
+    "desktop:build": "node src-tauri/scripts/bundle-env.mjs && tauri build --bundles app && node src-tauri/scripts/sign-macos.mjs"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.2.6",

@@ -1,15 +1,15 @@
-use crate::AppState;
+use crate::ops::{finish_call, utc_now};
 use crate::routes::models::search_results_probe;
+use crate::AppState;
 use axum::{
-    Json,
     extract::{Query, State},
+    http::HeaderMap,
+    Json,
 };
-use reqwest::{Client, Url};
+use reqwest::Url;
 use serde::Deserialize;
 use serde_json::Value;
-use serde_json::json;
-
-use crate::routes::probe_models::CompanyDetails;
+use std::time::Instant;
 
 #[derive(Deserialize)]
 pub struct params {
@@ -17,17 +17,15 @@ pub struct params {
     filters: String,
 }
 
-// curl --location 'https://api.probe42.in/probe_pro_sandbox/entities?limit=25&filters=%7B%22nameStartsWith%22%3A%22Probe%22%2C%22entityType%22%3A%5B%22company%22%2C%22llp%22%5D%7D' \
-// --header 'x-api-key: Replace this with your API Key' \
-// --header 'Accept: application/json' \
-// --header 'x-api-version: 1.3'
-
 pub async fn probe_search(
     State(app_state): State<AppState>,
     Query(search_paramas): Query<params>,
+    headers: HeaderMap,
 ) -> Result<Json<search_results_probe>, String> {
-    let api_key = app_state.probe_key;
-    let client = app_state.reqwest_client;
+    let start = Instant::now();
+    let start_ts = utc_now();
+    let api_key = app_state.probe_key_value();
+    let client = app_state.reqwest_client.clone();
 
     let limit = search_paramas.limit;
     let filters = search_paramas.filters;
@@ -40,53 +38,83 @@ pub async fn probe_search(
 
     println!("sending probe request: {}", url);
 
-    let response = client
-        .get(url)
-        .header("x-api-key", api_key)
-        .header("Accept", "application/json")
-        .header("x-api-version", "1.3")
-        .send()
-        .await
-        .map_err(|e| format!("error sending to probe42 {e}"))?;
+    let result = async {
+        let response = client
+            .get(url)
+            .header("x-api-key", api_key)
+            .header("Accept", "application/json")
+            .header("x-api-version", "1.3")
+            .send()
+            .await
+            .map_err(|e| format!("error sending to probe42 {e}"))?;
 
-    println!("status: {}", response.status());
+        println!("status: {}", response.status());
 
-    let resp: search_results_probe = response
-        .json()
-        .await
-        .map_err(|e| format!("error getting from probe42 {e}"))?;
+        let resp: search_results_probe = response
+            .json()
+            .await
+            .map_err(|e| format!("error getting from probe42 {e}"))?;
+        Ok(Json(resp))
+    }
+    .await;
 
-    Ok(Json(resp))
+    finish_call(
+        app_state.sqlite_path.clone(),
+        app_state.metrics.clone(),
+        headers,
+        "probe_search",
+        start,
+        start_ts,
+        result.is_ok(),
+        result.as_ref().err().cloned(),
+    );
+    result
 }
-// curl --location 'https://api.probe42.in/probe_pro_sandbox/companies/U15549PN1992FTC065522/comprehensive-details' --header 'x-api-key: Replace this with your API Key' --header 'Accept: application/json' --header 'x-api-version: 1.3'
 
 #[derive(Debug, Deserialize)]
 pub struct company_details_params {
     cin: String,
 }
+
 pub async fn company_comprehensive_details(
     State(app_state): State<AppState>,
     Query(params): Query<company_details_params>,
+    headers: HeaderMap,
 ) -> Result<Json<Value>, String> {
-    let api_key = app_state.probe_key;
-    let client = app_state.reqwest_client;
+    let start = Instant::now();
+    let start_ts = utc_now();
+    let api_key = app_state.probe_key_value();
+    let client = app_state.reqwest_client.clone();
 
     let cin = params.cin;
-
     let url =
         format!("https://api.probe42.in/probe_pro_sandbox/companies/{cin}/comprehensive-details");
 
-    let resp: Value = client
-        .get(url)
-        .header("x-api-key", api_key)
-        .header("Accept", "application/json")
-        .header("x-api-version", "1.3")
-        .send()
-        .await
-        .map_err(|e| format!("error sending to probe42 {e}"))?
-        .json()
-        .await
-        .map_err(|e| format!("error unmarshaling comp details {e}"))?;
+    let result = async {
+        let resp: Value = client
+            .get(url)
+            .header("x-api-key", api_key)
+            .header("Accept", "application/json")
+            .header("x-api-version", "1.3")
+            .send()
+            .await
+            .map_err(|e| format!("error sending to probe42 {e}"))?
+            .json()
+            .await
+            .map_err(|e| format!("error unmarshaling comp details {e}"))?;
+        Ok(Json(resp))
+    }
+    .await;
 
-    Ok(Json(resp))
+    finish_call(
+        app_state.sqlite_path.clone(),
+        app_state.metrics.clone(),
+        headers,
+        "company_details",
+        start,
+        start_ts,
+        result.is_ok(),
+        result.as_ref().err().cloned(),
+    );
+    result
 }

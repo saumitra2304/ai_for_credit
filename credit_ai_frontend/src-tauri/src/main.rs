@@ -91,25 +91,19 @@ fn reserve_port() -> std::io::Result<u16> {
     Ok(port)
 }
 
-fn python_bin() -> &'static str {
-    if cfg!(windows) {
-        "python"
-    } else {
-        "python3"
-    }
-}
-
 fn sidecar_binary(app: &tauri::AppHandle) -> Option<PathBuf> {
-    let mut dirs = vec![PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("binaries")];
+    let mut dirs = Vec::new();
+    if let Ok(res) = app.path().resource_dir() {
+        dirs.push(res.join("binaries"));
+        dirs.push(res);
+    }
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
+            dirs.push(dir.join("../Resources/binaries"));
             dirs.push(dir.to_path_buf());
         }
     }
-    if let Ok(res) = app.path().resource_dir() {
-        dirs.push(res.clone());
-        dirs.push(res.join("binaries"));
-    }
+    dirs.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("binaries"));
 
     let names = [
         "reasoning-layer",
@@ -121,7 +115,7 @@ fn sidecar_binary(app: &tauri::AppHandle) -> Option<PathBuf> {
     for dir in dirs {
         for name in names {
             let path = dir.join(name);
-            if path.exists() {
+            if path.is_file() {
                 return Some(path);
             }
         }
@@ -137,16 +131,20 @@ fn spawn_python(
     sqlite: &Path,
 ) -> std::io::Result<Child> {
     let reasoning = reasoning_dir();
-    let mut cmd = if let Some(sidecar) = sidecar_binary(app) {
-        eprintln!("using Python sidecar {}", sidecar.display());
-        Command::new(sidecar)
-    } else {
-        let mut cmd = Command::new(python_bin());
-        cmd.arg(reasoning.join("main.py"));
-        cmd
-    };
+    let sidecar = sidecar_binary(app).ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "bundled reasoning-layer sidecar is missing",
+        )
+    })?;
+    eprintln!("using Python sidecar {}", sidecar.display());
 
-    cmd.current_dir(&reasoning)
+    let work_dir = sqlite.parent().filter(|p| p.exists()).unwrap_or(&reasoning);
+    let log = std::fs::File::create(work_dir.join("python.log"))?;
+    let log_err = log.try_clone()?;
+
+    let mut cmd = Command::new(sidecar);
+    cmd.current_dir(work_dir)
         .env("HOST", "127.0.0.1")
         .env("PORT", port.to_string())
         .env("SME_API_BASE", format!("http://127.0.0.1:{rust_port}"))
@@ -154,8 +152,8 @@ fn spawn_python(
         .env("SQLITE_PATH", sqlite)
         .env("PYTHONUNBUFFERED", "1")
         .stdin(Stdio::null())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit());
+        .stdout(Stdio::from(log))
+        .stderr(Stdio::from(log_err));
 
     #[cfg(unix)]
     {
@@ -184,7 +182,7 @@ fn terminate_child(child: &mut Child) {
 
 async fn wait_healthy(origin: &str, token: &str) -> bool {
     let client = reqwest::Client::new();
-    for _ in 0..80 {
+    for _ in 0..120 {
         let mut req = client.get(format!("{origin}/health"));
         if !token.is_empty() {
             req = req.header("X-Internal-Token", token);
@@ -254,11 +252,7 @@ async fn start_backends(
     use_ephemeral: bool,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let rust_preferred: u16 = if use_ephemeral { 0 } else { 3000 };
-    let python_port: u16 = if use_ephemeral {
-        reserve_port()?
-    } else {
-        8001
-    };
+    let python_port: u16 = if use_ephemeral { reserve_port()? } else { 8001 };
 
     let rust_listener: Option<TcpListener>;
     let rust_port: u16;

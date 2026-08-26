@@ -13,6 +13,13 @@ __pycache__/
 *.sqlite
 *.sqlite3
 
+# Desktop packaging
+credit_ai_frontend/src-tauri/binaries/
+credit_ai_frontend/src-tauri/gen/
+credit_ai_frontend/src-tauri/bundled.env
+reasoning_layer/build/
+reasoning_layer/dist/
+
 # OS generated files
 .DS_Store
 Thumbs.db

@@ -1,7 +1,7 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use axum::{
     extract::{Query, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     Json,
 };
 use reqwest::Client;
@@ -10,6 +10,7 @@ use serde_json::Value;
 use tokio::time::sleep;
 
 use crate::{
+    ops::{finish_call, utc_now},
     routes::models::{final_json_brisk, order_details_briskall, SummaryParams},
     AppState,
 };
@@ -149,52 +150,81 @@ async fn fetch_json_post<T: DeserializeOwned>(
 pub async fn insta_summary(
     State(state): State<AppState>,
     Query(params): Query<SummaryParams>,
+    headers: HeaderMap,
 ) -> Result<Json<Value>, (StatusCode, String)> {
+    let start = Instant::now();
+    let start_ts = utc_now();
     let url = format!(
         "https://instafinancials.com/api/InstaSummary/v1/json/CompanyCIN/{}",
         params.cin
     );
+    let api_key = state.api_key_value();
 
-    let json_body: Value = fetch_json(&state.reqwest_client, &url, &state.api_key).await?;
-    Ok(Json(json_body))
+    let result = fetch_json(&state.reqwest_client, &url, &api_key).await.map(Json);
+    finish_call(
+        state.sqlite_path.clone(),
+        state.metrics.clone(),
+        headers,
+        "insta_summary",
+        start,
+        start_ts,
+        result.is_ok(),
+        result.as_ref().err().map(|(_, msg)| msg.clone()),
+    );
+    result
 }
 
 pub async fn brisk_all(
     Query(params): Query<SummaryParams>,
     State(state): State<AppState>,
+    headers: HeaderMap,
 ) -> Result<Json<final_json_brisk>, (StatusCode, String)> {
+    let start = Instant::now();
+    let start_ts = utc_now();
     let client = &state.reqwest_client;
-    let api_key = &state.api_key;
+    let api_key = state.api_key_value();
 
-    // Step 1: Order Report
-    let order_url = format!(
-        "https://api.instafinancials.com/InstaReports/v1/BRisk/CompanyCIN/{}/OrderReport",
-        params.cin
-    );
-    let order_resp: order_details_briskall = fetch_json_post(client, &order_url, api_key).await?;
+    let result = async {
+        let order_url = format!(
+            "https://api.instafinancials.com/InstaReports/v1/BRisk/CompanyCIN/{}/OrderReport",
+            params.cin
+        );
+        let order_resp: order_details_briskall = fetch_json_post(client, &order_url, &api_key).await?;
 
-    // Step 2: Poll status until complete
-    let order_status_url = format!(
-        "https://api.instafinancials.com/InstaReports/v1/BRisk/OrderID/{}/GetStatus",
-        order_resp.order_id
-    );
+        let order_status_url = format!(
+            "https://api.instafinancials.com/InstaReports/v1/BRisk/OrderID/{}/GetStatus",
+            order_resp.order_id
+        );
 
-    loop {
-        let resp_status: order_details_briskall = fetch_json(client, &order_status_url, api_key).await?;
+        loop {
+            let resp_status: order_details_briskall =
+                fetch_json(client, &order_status_url, &api_key).await?;
 
-        if resp_status.order_status == "Order Completed" {
-            break;
+            if resp_status.order_status == "Order Completed" {
+                break;
+            }
+
+            sleep(Duration::from_secs(60)).await;
         }
 
-        sleep(Duration::from_secs(60)).await;
+        let download_url = format!(
+            "https://api.instafinancials.com/InstaReports/v1/BRisk/OrderID/{}/DownloadReport",
+            order_resp.order_id
+        );
+        let final_report: final_json_brisk = fetch_json(client, &download_url, &api_key).await?;
+        Ok(Json(final_report))
     }
+    .await;
 
-    // Step 3: Download Report
-    let download_url = format!(
-        "https://api.instafinancials.com/InstaReports/v1/BRisk/OrderID/{}/DownloadReport",
-        order_resp.order_id
+    finish_call(
+        state.sqlite_path.clone(),
+        state.metrics.clone(),
+        headers,
+        "brisk_all",
+        start,
+        start_ts,
+        result.is_ok(),
+        result.as_ref().err().map(|(_, msg)| msg.clone()),
     );
-    let final_report: final_json_brisk = fetch_json(client, &download_url, api_key).await?;
-
-    Ok(Json(final_report))
+    result
 }

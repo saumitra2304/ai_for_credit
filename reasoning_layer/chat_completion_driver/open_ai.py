@@ -1,5 +1,4 @@
 import asyncio
-import os
 import re
 import sys
 import json
@@ -8,16 +7,22 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from openai import AsyncOpenAI
+from sql_db.settings_store import get_setting
 
-# Local Ollama, OpenAI-compatible endpoint. The api_key is required by the
-# client but ignored by Ollama.
-client = AsyncOpenAI(
-    base_url=os.getenv("OPENAI_BASE_URL", "http://127.0.0.1:11434/v1"),
-    api_key=os.getenv("OPENAI_API_KEY", "ollama"),
-    timeout=1800.0,          # 30 min: a long final call must not be cut off mid-stream
-)
+_llm_client = None
+_llm_sig = None
 
-MODEL_NAME = os.getenv("OPENAI_MODEL_NAME", "qwen3:8b")
+
+def _llm_client_and_model():
+    global _llm_client, _llm_sig
+    base_url = get_setting("OPENAI_BASE_URL", "http://127.0.0.1:11434/v1")
+    api_key = get_setting("OPENAI_API_KEY", "ollama")
+    model = get_setting("OPENAI_MODEL_NAME", "qwen3:8b")
+    sig = (base_url, api_key)
+    if _llm_client is None or _llm_sig != sig:
+        _llm_client = AsyncOpenAI(base_url=base_url, api_key=api_key, timeout=1800.0)
+        _llm_sig = sig
+    return _llm_client, model
 
 # Output caps. Without these a confused model generates until it hits the
 # context ceiling, which is what turned one extraction call into 16 minutes.
@@ -204,8 +209,9 @@ async def chat_endpoint_stream(query, company_information_list, chat_history, is
     ]
 
     try:
-        stream = await client.chat.completions.create(
-            model=MODEL_NAME,
+        llm, model_name = _llm_client_and_model()
+        stream = await llm.chat.completions.create(
+            model=model_name,
             messages=messages,
             max_tokens=max_tokens,
             temperature=temperature,
@@ -223,6 +229,11 @@ async def chat_endpoint_stream(query, company_information_list, chat_history, is
         raise
     except Exception as exc:
         _log(f"[llm error {type(exc).__name__}: {exc}]")
+        try:
+            from admin_routes import record_llm_error
+            record_llm_error()
+        except Exception:
+            pass
         raise
 
 

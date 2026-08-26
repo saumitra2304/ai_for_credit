@@ -64,11 +64,16 @@ def _validate_password(password: str) -> None:
 
 
 def _user_row(row) -> dict:
+    try:
+        is_admin = bool(row["is_admin"])
+    except (IndexError, KeyError):
+        is_admin = False
     return {
         "id": row["id"],
         "email": row["email"],
         "display_name": row["display_name"],
         "created_at": row["created_at"],
+        "is_admin": is_admin,
     }
 
 
@@ -87,12 +92,14 @@ async def register_user(email: str, password: str, display_name: str | None = No
 
         now = _utcnow().isoformat()
         password_hash = hash_password(password)
+        existing_users = await db.execute_fetchall("SELECT COUNT(*) AS count FROM users")
+        is_admin = 1 if not existing_users[0]["count"] else 0
         cursor = await db.execute(
             """
-            INSERT INTO users (email, password_hash, display_name, created_at)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO users (email, password_hash, display_name, created_at, is_admin)
+            VALUES (?, ?, ?, ?, ?)
             """,
-            (email, password_hash, display_name, now),
+            (email, password_hash, display_name, now, is_admin),
         )
         user_id = cursor.lastrowid
         token, expires_at = await _create_session(db, user_id)
@@ -102,6 +109,7 @@ async def register_user(email: str, password: str, display_name: str | None = No
             "email": email,
             "display_name": display_name,
             "created_at": now,
+            "is_admin": bool(is_admin),
         }
         return {
             "token": token,
@@ -118,7 +126,7 @@ async def login_user(email: str, password: str) -> dict:
     db = await open_db()
     try:
         rows = await db.execute_fetchall(
-            "SELECT id, email, password_hash, display_name, created_at FROM users WHERE email = ?",
+            "SELECT id, email, password_hash, display_name, created_at, COALESCE(is_admin, 0) AS is_admin FROM users WHERE email = ?",
             (email,),
         )
         if not rows:
@@ -156,7 +164,7 @@ async def get_user_for_token(token: str) -> dict | None:
     try:
         rows = await db.execute_fetchall(
             """
-            SELECT u.id, u.email, u.display_name, u.created_at, s.expires_at
+            SELECT u.id, u.email, u.display_name, u.created_at, COALESCE(u.is_admin, 0) AS is_admin, s.expires_at
             FROM sessions s
             JOIN users u ON u.id = s.user_id
             WHERE s.token = ?
