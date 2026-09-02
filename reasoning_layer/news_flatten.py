@@ -35,3 +35,16 @@ def flatten_news(label, categories):
     for cat, payload in categories.items():
         block[cat] = _articles(payload)
     return json.dumps(block, indent=2, default=str)
+
+
+async def fetch_topic_news(client, queries, semaphore):
+    """Follow-up / topic search. Does not replace fetch_company_news."""
+    results = await fetch_news(client, queries, semaphore)
+    return list(zip(queries, results))
+
+
+def flatten_topic_news(pairs, per_query=8):
+    block = []
+    for query, payload in pairs:
+        block.append({"query": query, "articles": _articles(payload)[:per_query]})
+    return json.dumps(block, indent=2, default=str)

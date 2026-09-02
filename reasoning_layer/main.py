@@ -2,6 +2,7 @@ import aiohttp
 import hmac
 import os
 import sys
+import time
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -11,6 +12,7 @@ from dotenv import load_dotenv
 from auth_routes import get_current_user_id, router as auth_router
 from chat_completion_driver.open_ai import (
     chat_endpoint_stream, CREDIT_INSTRUCTION, NEWS_INSTRUCTION, FOLLOWUP_INSTRUCTION,
+    FOLLOWUP_WEB_NOTE, plan_followup_web_search,
 )
 from sme_api.insta_summary_f import insta_summary
 from pydantic import BaseModel
@@ -18,11 +20,12 @@ from sql_db.chat_store import get_chat, create_chat, update_chat, get_chat_histo
 from sme_api.probe24_comp_details import company_details
 from financial_flatten import flatten_company
 from credit_flatten import flatten_credit
-from news_flatten import fetch_company_news, flatten_news
+from news_flatten import fetch_company_news, flatten_news, fetch_topic_news, flatten_topic_news
 from sql_db import auth_store
 from sql_db.db import init_db_sync
 from sql_db import settings_store
-from admin_routes import router as admin_router
+from admin_routes import router as admin_router, observe_request
+from request_ctx import bind_request_id, log_event, span, agen_span
 
 load_dotenv()
 
@@ -83,6 +86,35 @@ async def require_internal_token(request: Request, call_next):
     return await call_next(request)
 
 
+_NOISY_PATHS = ("/admin/logs", "/admin/traces", "/admin/metrics", "/health")
+
+
+@app.middleware("http")
+async def tracing_middleware(request: Request, call_next):
+    rid = bind_request_id(request.headers.get("x-request-id"))
+    started = time.perf_counter()
+    status = 500
+    try:
+        response = await call_next(request)
+        status = response.status_code
+        response.headers["x-request-id"] = rid
+        return response
+    except Exception as exc:
+        await log_event("error", "http", f"{request.method} {request.url.path} crashed: {exc}")
+        raise
+    finally:
+        duration = time.perf_counter() - started
+        path = request.url.path
+        observe_request(request.method, path, status, duration)
+        if not path.startswith(_NOISY_PATHS) and request.method != "OPTIONS":
+            level = "error" if status >= 400 else "info"
+            await log_event(
+                level,
+                "http",
+                f"{request.method} {path} {status} ({duration * 1000:.0f}ms)",
+            )
+
+
 @app.get("/health")
 async def health():
     return {"ok": True}
@@ -104,6 +136,28 @@ def _emit(text: str) -> str:
     """Mirror streamed chunks to the server terminal."""
     print(text, end="", file=sys.stderr, flush=True)
     return text
+
+
+async def _traced_stream(name: str, request: ChatRequest, agen):
+    async with span(
+        name,
+        query=(request.query or "")[:180],
+        cins=",".join(request.cin_list),
+        chat_id=str(request.chat_id),
+    ):
+        await log_event(
+            "info",
+            "agent",
+            f"{name} started: {(request.query or '')[:160]}",
+            extra={"cins": request.cin_list, "chat_id": str(request.chat_id)},
+        )
+        try:
+            async for chunk in agen:
+                yield chunk
+            await log_event("info", "agent", f"{name} completed")
+        except Exception as exc:
+            await log_event("error", "agent", f"{name} failed: {type(exc).__name__}: {exc}")
+            raise
 
 
 async def _collect(gen):
@@ -172,6 +226,21 @@ def _followup_context(cin_list, cache):
     return "\n\n".join(parts)
 
 
+async def _followup_web_search(query: str, cache: dict, cin_list: list[str], client) -> str:
+    names = [
+        cache[cin].get("label")
+        for cin in cin_list
+        if cache.get(cin, {}).get("label")
+    ]
+    queries = await plan_followup_web_search(query, names)
+    if not queries:
+        print("[followup] no web search (answerable from filings)", file=sys.stderr, flush=True)
+        return ""
+    print(f"[followup] web search {queries}", file=sys.stderr, flush=True)
+    pairs = await fetch_topic_news(client, queries, app.state.semaphore_news)
+    return flatten_topic_news(pairs)
+
+
 def _answer_header(cin_list, cache, results) -> str:
     if len(cin_list) == 1 and results:
         cin = cin_list[0]
@@ -195,13 +264,16 @@ async def _chat_stream(request: ChatRequest, user_id: int):
     _ensure_cache(chat_history)
 
     yield _emit("Loading company data...\n")
-    results = await _load_results(request, chat_history, client, semaphore)
+    await log_event("info", "agent", f"Loading company data for {len(request.cin_list)} CIN(s)")
+    async with span("load_company_data", cins=",".join(request.cin_list)):
+        results = await _load_results(request, chat_history, client, semaphore)
     cache = chat_history.company_cache
 
     # Follow-up: all companies cached + prior messages — answer only the new question.
     if _is_followup(chat_history, cache, request.cin_list):
         print("[followup] skipping credit/news/detail; direct answer only",
               file=sys.stderr, flush=True)
+        await log_event("info", "agent", "Follow-up: skip credit/news/detail rebuild")
         sections = []
         for entry in results:
             cin = _cin(entry)
@@ -214,11 +286,27 @@ async def _chat_stream(request: ChatRequest, user_id: int):
 
         header = _answer_header(request.cin_list, cache, results)
         context = _followup_context(request.cin_list, cache)
+        instruction = FOLLOWUP_INSTRUCTION
+        try:
+            async with span("followup.web_search"):
+                web_block = await _followup_web_search(
+                    request.query, cache, request.cin_list, client
+                )
+        except Exception as exc:
+            print(f"[followup] web search failed: {exc}", file=sys.stderr, flush=True)
+            await log_event("error", "agent", f"Follow-up web search failed: {exc}")
+            web_block = ""
+        if web_block:
+            context = f"{context}\n\n### Web search\n{web_block}"
+            instruction = FOLLOWUP_INSTRUCTION + FOLLOWUP_WEB_NOTE
         body = ""
         started = False
-        async for chunk in chat_endpoint_stream(
-            request.query, [context], chat_history, is_final=True,
-            instruction=FOLLOWUP_INSTRUCTION,
+        async for chunk in agen_span(
+            "followup.answer",
+            chat_endpoint_stream(
+                request.query, [context], chat_history, is_final=True,
+                instruction=instruction,
+            ),
         ):
             if not started:
                 yield _emit(header)
@@ -239,18 +327,26 @@ async def _chat_stream(request: ChatRequest, user_id: int):
     flats = []
 
     yield _emit("\n# Per-Company Credit Answer\n\n")
+    await log_event("info", "agent", "Generating per-company credit answer")
     credit_answer = ""
-    async for chunk in credit_tool_stream(
-        request, user_id, results=results, chat_history=chat_history, company_cache=cache
+    async for chunk in agen_span(
+        "credit",
+        credit_tool_stream(
+            request, user_id, results=results, chat_history=chat_history, company_cache=cache
+        ),
     ):
         credit_answer += chunk
         yield _emit(chunk)
 
     yield _emit("\n\n---\n\n# Per-Company News\n\n")
+    await log_event("info", "agent", "Gathering per-company news")
     news_answer = ""
-    async for chunk in news_tool_stream(
-        request, user_id, results=results, chat_history=chat_history,
-        client=client, company_cache=cache,
+    async for chunk in agen_span(
+        "news",
+        news_tool_stream(
+            request, user_id, results=results, chat_history=chat_history,
+            client=client, company_cache=cache,
+        ),
     ):
         news_answer += chunk
         yield _emit(chunk)
@@ -295,8 +391,11 @@ async def _chat_stream(request: ChatRequest, user_id: int):
         section = header
         per_company_query = f"{request.query}\n\n(This call covers only: {label}.)"
         answer = ""
-        async for chunk in chat_endpoint_stream(
-            per_company_query, [flat], chat_history, is_final=True
+        await log_event("info", "agent", f"Writing financial detail for {label}")
+        async for chunk in agen_span(
+            "financial_detail",
+            chat_endpoint_stream(per_company_query, [flat], chat_history, is_final=True),
+            company=label,
         ):
             answer += chunk
             section += chunk
@@ -325,8 +424,12 @@ async def _chat_stream(request: ChatRequest, user_id: int):
             )
         body = ""
         started = False
-        async for chunk in chat_endpoint_stream(
-            synthesis_query, [combined_tables], chat_history, is_final=True
+        await log_event("info", "agent", "Synthesizing final answer")
+        async for chunk in agen_span(
+            "synthesis",
+            chat_endpoint_stream(
+                synthesis_query, [combined_tables], chat_history, is_final=True
+            ),
         ):
             if not started:
                 yield _emit("\n\n---\n\n" + answer_header)
@@ -449,7 +552,7 @@ async def chat(
 ):
     async def stream():
         try:
-            async for chunk in _chat_stream(request, user_id):
+            async for chunk in _traced_stream("chat", request, _chat_stream(request, user_id)):
                 yield chunk
         except Exception as e:
             import traceback
@@ -477,7 +580,7 @@ async def news(
 ):
     async def stream():
         try:
-            async for chunk in _news_stream(request, user_id):
+            async for chunk in _traced_stream("news", request, _news_stream(request, user_id)):
                 yield chunk
         except Exception as e:
             import traceback
@@ -505,7 +608,7 @@ async def credit(
 ):
     async def stream():
         try:
-            async for chunk in _credit_stream(request, user_id):
+            async for chunk in _traced_stream("credit", request, _credit_stream(request, user_id)):
                 yield chunk
         except Exception as e:
             import traceback

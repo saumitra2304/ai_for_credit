@@ -27,11 +27,11 @@ export function createMessage(role, content, turnId) {
   }
 }
 
-export function createTurnMessages(query) {
+export function createTurnMessages(query, extras = {}) {
   const turnId = crypto.randomUUID()
   return {
     turnId,
-    userMessage: createMessage('user', query, turnId),
+    userMessage: { ...createMessage('user', query, turnId), ...extras },
     assistantId: crypto.randomUUID(),
   }
 }

@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from sql_db.settings_store import get_setting
+from request_ctx import span, log_event
 
 SEARCH_URL = "https://www.searchapi.io/api/v1/search"
 
@@ -41,6 +42,7 @@ async def _fetch_one(
 ) -> Dict[str, Any]:
     api_key = get_setting("SEARCH_API_KEY")
     if not api_key:
+        await log_event("warn", "search", "SEARCH_API_KEY missing; skipping web search")
         return {"query": query, "error": True, "organic_results": []}
     params = {
         "engine": "google_news",
@@ -51,18 +53,27 @@ async def _fetch_one(
         "api_key": api_key,
     }
     async with semaphore:
-        try:
-            async with client.get(SEARCH_URL, params=params) as resp:
-                resp.raise_for_status()
-                data = await resp.json()
-                return strip_blobs(data)
-        except aiohttp.ClientResponseError as e:
-            print(f"[{query}] HTTP {e.status}: {e.message}")
-        except aiohttp.ClientError as e:
-            print(f"[{query}] request failed: {e}")
-        except asyncio.TimeoutError:
-            print(f"[{query}] timed out")
-        return {"query": query, "error": True, "organic_results": []}
+        async with span("web_search", query=query[:120], engine="google_news"):
+            try:
+                async with client.get(SEARCH_URL, params=params) as resp:
+                    resp.raise_for_status()
+                    data = await resp.json()
+                    cleaned = strip_blobs(data)
+                    n = len(cleaned.get("organic_results") or []) + len(
+                        cleaned.get("top_stories") or []
+                    )
+                    await log_event("info", "search", f"search '{query[:100]}' → {n} hits")
+                    return cleaned
+            except aiohttp.ClientResponseError as e:
+                print(f"[{query}] HTTP {e.status}: {e.message}")
+                await log_event("error", "search", f"search HTTP {e.status}: {query[:100]}")
+            except aiohttp.ClientError as e:
+                print(f"[{query}] request failed: {e}")
+                await log_event("error", "search", f"search failed: {e}")
+            except asyncio.TimeoutError:
+                print(f"[{query}] timed out")
+                await log_event("error", "search", f"search timed out: {query[:100]}")
+            return {"query": query, "error": True, "organic_results": []}
 
 
 async def main(queries: List[str]) -> List[Dict[str, Any]]:

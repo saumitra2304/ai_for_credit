@@ -203,21 +203,47 @@ function KeysTab() {
   )
 }
 
+function levelVariant(level) {
+  if (level === 'error') return 'destructive'
+  if (level === 'warn' || level === 'warning') return 'warning'
+  if (level === 'info') return 'default'
+  return 'secondary'
+}
+
+function sourceClass(source) {
+  const map = {
+    agent: 'bg-sky-500/15 text-sky-700 dark:text-sky-300',
+    llm: 'bg-violet-500/15 text-violet-700 dark:text-violet-300',
+    search: 'bg-amber-500/15 text-amber-800 dark:text-amber-300',
+    probe: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
+    http: 'bg-muted text-muted-foreground',
+    rust: 'bg-orange-500/15 text-orange-800 dark:text-orange-300',
+    python: 'bg-primary/10 text-primary',
+  }
+  return map[source] || 'bg-muted text-muted-foreground'
+}
+
 function LogsTab({ active }) {
   const [logs, setLogs] = useState([])
   const [level, setLevel] = useState('')
+  const [source, setSource] = useState('')
   const [query, setQuery] = useState('')
   const [error, setError] = useState(null)
+  const [openId, setOpenId] = useState(null)
 
   const load = useCallback(async () => {
     try {
-      const data = await adminApi.fetchLogs({ level: level || undefined, q: query || undefined })
+      const data = await adminApi.fetchLogs({
+        level: level || undefined,
+        source: source || undefined,
+        q: query || undefined,
+      })
       setLogs(data.logs ?? [])
       setError(null)
     } catch (err) {
       setError(err.message)
     }
-  }, [level, query])
+  }, [level, source, query])
 
   useEffect(() => {
     if (!active) return undefined
@@ -236,7 +262,22 @@ function LogsTab({ active }) {
         >
           <option value="">All levels</option>
           <option value="info">info</option>
+          <option value="warn">warn</option>
           <option value="error">error</option>
+        </select>
+        <select
+          className="h-9 rounded-md border border-input bg-transparent px-2 text-sm"
+          value={source}
+          onChange={(event) => setSource(event.target.value)}
+        >
+          <option value="">All sources</option>
+          <option value="agent">agent</option>
+          <option value="llm">llm</option>
+          <option value="search">search</option>
+          <option value="probe">probe</option>
+          <option value="http">http</option>
+          <option value="rust">rust</option>
+          <option value="python">python</option>
         </select>
         <Input
           className="max-w-xs"
@@ -253,18 +294,34 @@ function LogsTab({ active }) {
       <ScrollArea className="min-h-0 flex-1 rounded-xl border bg-card">
         <div className="divide-y font-mono text-xs">
           {logs.length === 0 && (
-            <p className="p-4 text-sm text-muted-foreground">No logs yet.</p>
+            <p className="p-4 text-sm text-muted-foreground">No logs yet. Run an analysis to see agent steps.</p>
           )}
           {logs.map((log) => (
-            <div key={log.id} className="flex gap-3 px-4 py-2">
-              <span className="w-40 shrink-0 text-muted-foreground">{formatTime(log.ts)}</span>
-              <Badge variant={log.level === 'error' ? 'destructive' : 'secondary'}>{log.level}</Badge>
-              <span className="w-16 shrink-0 text-muted-foreground">{log.source}</span>
-              <span className="min-w-0 flex-1 break-all">{log.message}</span>
-              {log.request_id && (
-                <span className="w-28 shrink-0 truncate text-muted-foreground">{log.request_id}</span>
+            <button
+              key={log.id}
+              type="button"
+              onClick={() => setOpenId(openId === log.id ? null : log.id)}
+              className="flex w-full flex-col gap-1 px-4 py-2 text-left hover:bg-muted/40"
+            >
+              <div className="flex items-start gap-3">
+                <span className="w-40 shrink-0 text-muted-foreground">{formatTime(log.ts)}</span>
+                <Badge variant={levelVariant(log.level)} className="h-5 shrink-0">
+                  {log.level}
+                </Badge>
+                <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${sourceClass(log.source)}`}>
+                  {log.source}
+                </span>
+                <span className="min-w-0 flex-1 break-all text-[12px] leading-relaxed">{log.message}</span>
+                {log.request_id && (
+                  <span className="w-28 shrink-0 truncate text-muted-foreground">{log.request_id}</span>
+                )}
+              </div>
+              {openId === log.id && log.extra && (
+                <pre className="ml-40 overflow-x-auto rounded-md bg-muted/50 p-2 text-[11px] text-muted-foreground">
+                  {JSON.stringify(log.extra, null, 2)}
+                </pre>
               )}
-            </div>
+            </button>
           ))}
         </div>
       </ScrollArea>
@@ -319,25 +376,39 @@ function TracesTab({ active }) {
     return Math.min(...spans.map((span) => new Date(span.start_ts).getTime()))
   }, [spans])
 
+  const spanColor = (name, status) => {
+    if (status !== 'ok') return 'bg-destructive/80'
+    if (name.startsWith('llm')) return 'bg-violet-500/80'
+    if (name.includes('search') || name === 'news') return 'bg-amber-500/80'
+    if (name.includes('probe') || name === 'load_company_data') return 'bg-emerald-500/80'
+    if (name === 'credit') return 'bg-sky-500/80'
+    if (name === 'chat' || name === 'followup.answer' || name === 'synthesis') return 'bg-primary/80'
+    return 'bg-primary/70'
+  }
+
   return (
-    <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[280px_1fr]">
+    <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[300px_1fr]">
       <ScrollArea className="min-h-0 rounded-xl border bg-card">
         <div className="divide-y">
           {traces.length === 0 && (
-            <p className="p-4 text-sm text-muted-foreground">No traces yet.</p>
+            <p className="p-4 text-sm text-muted-foreground">No traces yet. Run a chat to record agent steps.</p>
           )}
           {traces.map((trace) => (
             <button
               key={trace.trace_id}
               type="button"
               onClick={() => openTrace(trace.trace_id)}
-              className={`block w-full px-3 py-2 text-left text-sm hover:bg-muted/60 ${
+              className={`block w-full px-3 py-2.5 text-left text-sm hover:bg-muted/60 ${
                 selected === trace.trace_id ? 'bg-muted' : ''
               }`}
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="font-medium">{trace.name || 'request'}</span>
-                {trace.errors > 0 && <Badge variant="destructive">{trace.errors}</Badge>}
+                {trace.errors > 0 ? (
+                  <Badge variant="destructive">{trace.errors}</Badge>
+                ) : (
+                  <Badge variant="success">{trace.spans}</Badge>
+                )}
               </div>
               <p className="truncate font-mono text-[11px] text-muted-foreground">{trace.trace_id}</p>
               <p className="text-[11px] text-muted-foreground">
@@ -350,28 +421,33 @@ function TracesTab({ active }) {
 
       <ScrollArea className="min-h-0 rounded-xl border bg-card p-4">
         {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
-        {!selected && <p className="text-sm text-muted-foreground">Select a trace.</p>}
+        {!selected && <p className="text-sm text-muted-foreground">Select a trace to see agent steps.</p>}
         {selected && (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {spans.map((span) => {
               const left = ((new Date(span.start_ts).getTime() - origin) / maxDuration) * 100
               const width = Math.max(2, (durationMs(span.start_ts, span.end_ts) / maxDuration) * 100)
               return (
-                <div key={span.span_id} className="space-y-1">
-                  <div className="flex items-center justify-between text-xs">
+                <div key={span.span_id} className="space-y-1 rounded-lg border border-border/40 bg-muted/15 px-3 py-2">
+                  <div className="flex items-center justify-between gap-2 text-xs">
                     <span className="font-medium">{span.name}</span>
-                    <span className="text-muted-foreground">
+                    <span className="tabular-nums text-muted-foreground">
                       {durationMs(span.start_ts, span.end_ts)}ms · {span.status}
                     </span>
                   </div>
-                  <div className="relative h-4 overflow-hidden rounded bg-muted">
+                  <div className="relative h-3.5 overflow-hidden rounded-full bg-muted">
                     <div
-                      className={`absolute top-0 h-full rounded ${
-                        span.status === 'ok' ? 'bg-primary/70' : 'bg-destructive/80'
-                      }`}
+                      className={`absolute top-0 h-full rounded-full ${spanColor(span.name, span.status)}`}
                       style={{ left: `${left}%`, width: `${width}%` }}
                     />
                   </div>
+                  {span.attrs && (
+                    <p className="truncate font-mono text-[10px] text-muted-foreground">
+                      {Object.entries(span.attrs)
+                        .map(([key, value]) => `${key}=${value}`)
+                        .join(' · ')}
+                    </p>
+                  )}
                 </div>
               )
             })}

@@ -5,9 +5,21 @@ INTERNAL_TOKEN = os.getenv("INTERNAL_TOKEN", "")
 
 
 def sme_headers() -> dict[str, str]:
+    headers: dict[str, str] = {}
     if INTERNAL_TOKEN:
-        return {"X-Internal-Token": INTERNAL_TOKEN}
-    return {}
+        headers["X-Internal-Token"] = INTERNAL_TOKEN
+    try:
+        from request_ctx import request_id_ctx, span_id_ctx
+
+        rid = request_id_ctx.get()
+        sid = span_id_ctx.get()
+        if rid:
+            headers["x-request-id"] = rid
+        if sid:
+            headers["x-parent-span-id"] = sid
+    except Exception:
+        pass
+    return headers
 
 
 def sme_url(path: str) -> str:

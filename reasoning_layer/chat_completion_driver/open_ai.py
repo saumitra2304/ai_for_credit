@@ -29,6 +29,7 @@ def _llm_client_and_model():
 MAX_TOKENS_EXTRACT = 1200
 MAX_TOKENS_AGENT = 4000       # credit / news custom-instruction calls
 MAX_TOKENS_FINAL = 8000       # is_final financial analysis only
+MAX_TOKENS_PLAN = 250         # follow-up search planner JSON
 
 # ~4 chars per token. 32k context minus room for the response.
 CHAR_BUDGET = 100_000
@@ -112,6 +113,111 @@ FOLLOWUP_INSTRUCTION = (
     "Cite specific figures where relevant.\n"
     "/no_think"
 )
+
+
+FOLLOWUP_WEB_NOTE = (
+    "\n\nRecent web/news search results for this follow-up are included under "
+    "Web search. They were chosen from the user's question. Use them for "
+    "current, market, sector, peer, or macro facts. Do not invent headlines. "
+    "Prefer these over older prior-news summaries when they conflict.\n"
+)
+
+
+SEARCH_PLAN_INSTRUCTION = (
+    "You plan Google News searches for a credit-analyst follow-up.\n"
+    "Filings, ratings, and prior analysis for the named companies are already "
+    "available. Do not search for figures that live in those filings "
+    "(P&L, ratios, leverage, working-capital days, existing rating tables).\n\n"
+    "Search when the question needs CURRENT or EXTERNAL facts: news, markets, "
+    "the company's industry/sector (whatever it is), macro, policy, rates, "
+    "peers, competitors, prices, demand, regulation, or latest events.\n"
+    "This must work for any company and any industry — infer the right topics "
+    "from the user's question and the company names. Do not assume real estate, "
+    "or any other sector.\n\n"
+    "If search is needed, write 1 to 3 short Google News query strings that "
+    "would retrieve those facts. Queries must follow from the question "
+    "(include a company name only when it helps). Do not copy the user "
+    "question verbatim unless it is already a good search.\n"
+    "If the question can be answered from the existing company analysis alone, "
+    "set search=false and queries=[].\n\n"
+    "Output ONLY JSON, no markdown:\n"
+    '{"search": true, "queries": ["query one", "query two"]}\n'
+    "or\n"
+    '{"search": false, "queries": []}\n'
+    "/no_think"
+)
+
+
+def _parse_search_plan(raw: str) -> list[str]:
+    text = strip_thinking(raw)
+    start = text.find("{")
+    end = text.rfind("}")
+    if start < 0 or end <= start:
+        return []
+    try:
+        data = json.loads(text[start:end + 1])
+    except json.JSONDecodeError:
+        return []
+    if not data.get("search"):
+        return []
+    out = []
+    seen = set()
+    for item in data.get("queries") or []:
+        if not isinstance(item, str):
+            continue
+        query = " ".join(item.split())[:160]
+        key = query.lower()
+        if len(query) < 3 or key in seen:
+            continue
+        seen.add(key)
+        out.append(query)
+        if len(out) >= 3:
+            break
+    return out
+
+
+async def plan_followup_web_search(query: str, company_names: list[str]) -> list[str]:
+    """Semantically decide whether to search and which Google News queries to run."""
+    names = ", ".join(n for n in company_names if n) or "(none)"
+    user_content = f"Companies: {names}\nQuestion: {query}"
+    messages = [
+        {"role": "system", "content": SEARCH_PLAN_INSTRUCTION},
+        {"role": "user", "content": user_content},
+    ]
+    try:
+        from request_ctx import span, log_event
+
+        llm, model_name = _llm_client_and_model()
+        _log(f"[search-plan] {user_content}")
+        async with span("search.plan", question=query[:160]):
+            response = await llm.chat.completions.create(
+                model=model_name,
+                messages=messages,
+                max_tokens=MAX_TOKENS_PLAN,
+                temperature=0.1,
+                stream=False,
+            )
+            raw = ""
+            if response.choices:
+                raw = response.choices[0].message.content or ""
+            queries = _parse_search_plan(raw)
+            _log(f"[search-plan] queries={queries}")
+            if queries:
+                await log_event("info", "search", f"planned searches: {queries}")
+            else:
+                await log_event("info", "search", "no web search needed for follow-up")
+            return queries
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        _log(f"[search-plan error {type(exc).__name__}: {exc}]")
+        try:
+            from request_ctx import log_event
+
+            await log_event("error", "search", f"search plan failed: {exc}")
+        except Exception:
+            pass
+        return []
 
 
 def _final_instruction(history_str):
@@ -210,20 +316,28 @@ async def chat_endpoint_stream(query, company_information_list, chat_history, is
 
     try:
         llm, model_name = _llm_client_and_model()
-        stream = await llm.chat.completions.create(
-            model=model_name,
-            messages=messages,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            stream=True,
-        )
-        async for chunk in stream:
-            if not chunk.choices:
-                continue
-            delta = chunk.choices[0].delta
-            text = getattr(delta, "content", None)
-            if text:
-                yield text
+        from request_ctx import agen_span, log_event
+
+        kind = "llm.agent" if instruction else ("llm.final" if is_final else "llm.extract")
+
+        async def _tokens():
+            stream = await llm.chat.completions.create(
+                model=model_name,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                stream=True,
+            )
+            async for chunk in stream:
+                if not chunk.choices:
+                    continue
+                delta = chunk.choices[0].delta
+                text = getattr(delta, "content", None)
+                if text:
+                    yield text
+
+        async for text in agen_span(kind, _tokens(), chars=total_chars, max_out=max_tokens):
+            yield text
     except asyncio.CancelledError:
         _log("[llm cancelled]")
         raise
@@ -231,7 +345,10 @@ async def chat_endpoint_stream(query, company_information_list, chat_history, is
         _log(f"[llm error {type(exc).__name__}: {exc}]")
         try:
             from admin_routes import record_llm_error
+            from request_ctx import log_event
+
             record_llm_error()
+            await log_event("error", "llm", f"{type(exc).__name__}: {exc}")
         except Exception:
             pass
         raise

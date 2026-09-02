@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Send, AlertCircle, Trash2, ArrowDown, Loader2, LogOut } from 'lucide-react'
+import { Send, AlertCircle, Trash2, ArrowDown, Loader2, LogOut, BarChart3 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { ChatTurn } from '@/components/ChatMessage'
-import { AnalysisProgress } from '@/components/AnalysisProgress'
+import { CompanyCharts } from '@/components/CompanyCharts'
+import { ThinkingPanel } from '@/components/ThinkingPanel'
 import { KuberLogo } from '@/components/KuberLogo'
 import { useChatScroll } from '@/hooks/useChatScroll'
 import {
@@ -21,6 +22,7 @@ import { formatChatIdLabel } from '@/lib/chatId'
 import { groupMessagesIntoTurns, createTurnMessages } from '@/lib/messages'
 import { saveChatSession, clearChatSession } from '@/lib/chatSessionStorage'
 import { debounce } from '@/lib/utils'
+import { isThinStream } from '@/lib/thinkingSteps'
 import { useAppStore } from '@/store/useAppStore'
 import { useAuthStore } from '@/store/useAuthStore'
 
@@ -30,6 +32,8 @@ const SUGGESTED_PROMPTS = [
   'Debt structure summary',
   '3-year financial trends',
 ]
+
+const MIN_THINK_MS = 8000
 
 export function ChatInterface() {
   const navigate = useNavigate()
@@ -52,6 +56,9 @@ export function ChatInterface() {
   const [currentStage, setCurrentStage] = useState(null)
   const [error, setError] = useState(null)
   const [streamingMessageId, setStreamingMessageId] = useState(null)
+  const [chartsOpen, setChartsOpen] = useState(false)
+  const [revealAnswer, setRevealAnswer] = useState(false)
+  const [pendingTurnId, setPendingTurnId] = useState(null)
 
   const scrollContainerRef = useRef(null)
   const contentRef = useRef(null)
@@ -61,6 +68,12 @@ export function ChatInterface() {
   )
   const simulatorRef = useRef(null)
   const abortRef = useRef(null)
+  const autoKeyRef = useRef('')
+  const runAnalysisRef = useRef(null)
+  const revealRef = useRef(false)
+  const thinkStartedRef = useRef(0)
+  const streamBufferRef = useRef('')
+  const revealTimerRef = useRef(null)
   const sessionRef = useRef({ activeChatId, selectedCompanies, messages, loading: false })
 
   const cinList = selectedCompanies.map((c) => c.cin)
@@ -110,89 +123,109 @@ export function ChatInterface() {
 
   useEffect(() => {
     setError(null)
+    setRevealAnswer(false)
+    setPendingTurnId(null)
     enableAutoScroll()
   }, [sessionKey, enableAutoScroll])
 
   useEffect(() => () => abortRef.current?.abort(), [])
 
-  const handleSend = async (text) => {
-    const query = (text ?? input).trim()
-    if (!query || loading) return
-
-    if (cinList.length === 0) {
-      setError('Select at least one company first.')
-      return
-    }
+  const runAnalysis = async (query, { hidePrompt = false } = {}) => {
+    const companies = sessionRef.current.selectedCompanies
+    const cins = companies.map((c) => c.cin)
+    if (!query || cins.length === 0) return
 
     setError(null)
     setInput('')
     setLoading(true)
-    setProgress(0)
-    setCurrentStage(null)
+    setProgress((prev) => Math.max(prev, 8))
+    const names = companies.map((c) => c.legalName).join(', ')
+    const fetchStage = { id: 'fetch', label: `Loading company data for ${names}` }
+    setCurrentStage(fetchStage)
+    setRevealAnswer(false)
+    revealRef.current = false
+    streamBufferRef.current = ''
+    thinkStartedRef.current = Date.now()
     enableAutoScroll()
 
-    const { userMessage, assistantId, turnId } = createTurnMessages(query)
+    const { userMessage, assistantId, turnId } = createTurnMessages(query, {
+      hidden: hidePrompt,
+    })
+    setPendingTurnId(turnId)
     updateMessages((prev) => [...prev, userMessage])
 
-    simulatorRef.current = createProgressSimulator(setProgress, setCurrentStage)
+    simulatorRef.current = createProgressSimulator(setProgress, setCurrentStage, fetchStage)
     abortRef.current?.abort()
     abortRef.current = new AbortController()
 
-    const chatId = ensureChatId()
-
-    try {
-      const response = await streamChatMessage({
-        cinList,
-        query,
-        chatId,
-        signal: abortRef.current.signal,
-        onStageChange: (stage) => {
-          simulatorRef.current?.cancel()
-          setCurrentStage(stage)
-          setProgress(getProgressForStage(stage))
-        },
-        onChunk: (_chunk, fullText) => {
-          simulatorRef.current?.cancel()
-          if (!hasDisplayableContent(fullText)) {
-            setCurrentStage((prev) => prev ?? { id: 'fetch', label: 'Loading company data' })
-            setProgress((prev) => Math.max(prev, 8))
-            return
-          }
-          const displayText = stripStreamPrefix(fullText)
-          setStreamingMessageId(assistantId)
-          updateMessages((prev) => {
-            const existing = prev.find((msg) => msg.id === assistantId)
-            if (!existing) {
-              return [
-                ...prev,
-                {
-                  id: assistantId,
-                  role: 'assistant',
-                  content: displayText,
-                  turnId,
-                },
-              ]
-            }
-            return prev.map((msg) =>
-              msg.id === assistantId ? { ...msg, content: displayText } : msg
-            )
-          })
-        },
-      })
-
-      const finalContent = stripStreamPrefix(response) || 'No response received.'
+    const paintAssistant = (displayText) => {
+      setStreamingMessageId(assistantId)
       updateMessages((prev) => {
         const existing = prev.find((msg) => msg.id === assistantId)
         if (!existing) {
           return [
             ...prev,
-            { id: assistantId, role: 'assistant', content: finalContent, turnId },
+            {
+              id: assistantId,
+              role: 'assistant',
+              content: displayText,
+              turnId,
+            },
           ]
         }
         return prev.map((msg) =>
-          msg.id === assistantId ? { ...msg, content: finalContent } : msg
+          msg.id === assistantId ? { ...msg, content: displayText } : msg
         )
       })
+    }
+
+    const maybeReveal = (displayText, force = false) => {
+      streamBufferRef.current = displayText
+      const waited = Date.now() - thinkStartedRef.current >= MIN_THINK_MS
+      if (!force && (!waited || isThinStream(displayText))) return
+      if (!revealRef.current) {
+        revealRef.current = true
+        setRevealAnswer(true)
+      }
+      paintAssistant(displayText)
+    }
+
+    const chatId = ensureChatId()
+    if (revealTimerRef.current) clearTimeout(revealTimerRef.current)
+    revealTimerRef.current = setTimeout(() => {
+      if (streamBufferRef.current) maybeReveal(streamBufferRef.current)
+    }, MIN_THINK_MS + 80)
+
+    try {
+      const response = await streamChatMessage({
+        cinList: cins,
+        query,
+        chatId,
+        signal: abortRef.current.signal,
+        onStageChange: (stage) => {
+          if (stage?.id && stage.id !== 'fetch') {
+            simulatorRef.current?.cancel()
+          }
+          setCurrentStage(stage)
+          setProgress((prev) => Math.max(prev, getProgressForStage(stage)))
+        },
+        onChunk: (_chunk, fullText) => {
+          if (!hasDisplayableContent(fullText)) {
+            setCurrentStage((prev) => prev ?? fetchStage)
+            setProgress((prev) => Math.max(prev, 8))
+            return
+          }
+          simulatorRef.current?.cancel()
+          maybeReveal(stripStreamPrefix(fullText))
+        },
+      })
+
+      const remaining = MIN_THINK_MS - (Date.now() - thinkStartedRef.current)
+      if (remaining > 0) {
+        await new Promise((resolve) => setTimeout(resolve, remaining))
+      }
+      const finalContent = stripStreamPrefix(response) || 'No response received.'
+      maybeReveal(finalContent, true)
 
       completeChat()
       persistSession({ interrupted: false })
@@ -210,17 +243,75 @@ export function ChatInterface() {
       setError(err.message)
       persistSession({ interrupted: true })
     } finally {
+      if (revealTimerRef.current) {
+        clearTimeout(revealTimerRef.current)
+        revealTimerRef.current = null
+      }
       simulatorRef.current?.complete()
       setLoading(false)
       setStreamingMessageId(null)
+      setPendingTurnId(null)
       setProgress(100)
       abortRef.current = null
     }
   }
 
+  runAnalysisRef.current = runAnalysis
+
+  const handleSend = async (text) => {
+    const query = (text ?? input).trim()
+    if (!query || loading) return
+    if (cinList.length === 0) {
+      setError('Select at least one company first.')
+      return
+    }
+    await runAnalysis(query)
+  }
+
+  useEffect(() => {
+    if (selectedCompanies.length === 0) {
+      autoKeyRef.current = ''
+      if (messages.length === 0) {
+        setLoading(false)
+        setCurrentStage(null)
+        setProgress(0)
+      }
+      return
+    }
+    if (messages.length > 0) return
+    const key = selectedCompanies.map((c) => c.cin).join(',')
+    if (autoKeyRef.current === key) return
+    autoKeyRef.current = key
+
+    const names = selectedCompanies.map((c) => c.legalName).join(', ')
+    let cancelled = false
+
+    setError(null)
+    setLoading(true)
+    setRevealAnswer(false)
+    setProgress(6)
+    setCurrentStage({
+      id: 'fetch',
+      label: `Loading company data for ${names}`,
+    })
+    enableAutoScroll()
+
+    const timer = setTimeout(() => {
+      if (cancelled) return
+      runAnalysisRef.current?.(`Complete credit analysis for ${names}`, { hidePrompt: true })
+    }, 400)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [selectedCompanies, messages.length, sessionKey, enableAutoScroll])
+
   const clearChat = () => {
     updateMessages([])
     setError(null)
+    setRevealAnswer(false)
+    setPendingTurnId(null)
     clearChatSession()
     resetChat()
   }
@@ -254,6 +345,22 @@ export function ChatInterface() {
               ? `${selectedCompanies.length} selected`
               : 'No company'}
           </Badge>
+          {selectedCompanies.length > 0 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1 px-2 text-xs"
+                  onClick={() => setChartsOpen(true)}
+                >
+                  <BarChart3 className="h-3.5 w-3.5" />
+                  Show charts
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Financial and credit charts</TooltipContent>
+            </Tooltip>
+          )}
           {messages.length > 0 && (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -281,6 +388,11 @@ export function ChatInterface() {
       </header>
 
       <div className="relative min-h-0 flex-1">
+        <CompanyCharts
+          companies={selectedCompanies}
+          open={chartsOpen}
+          onClose={() => setChartsOpen(false)}
+        />
         <div
           ref={scrollContainerRef}
           className="chat-scroll-container h-full overflow-y-auto overflow-x-hidden scrollbar-thin overscroll-contain"
@@ -318,7 +430,8 @@ export function ChatInterface() {
                 <KuberLogo size={48} />
                 <h2 className="mt-4 text-lg font-semibold">Credit Intelligence</h2>
                 <p className="mt-1 max-w-md text-sm text-muted-foreground">
-                  Select a company and ask for financials, ratings, or risk analysis.
+                  Select a company to load data, then wait while per-company analysis runs. Use
+                  Show charts for graphs from filings, scores, peers, and legal data.
                 </p>
 
                 {selectedCompanies.length > 0 && (
@@ -346,19 +459,45 @@ export function ChatInterface() {
               </motion.div>
             )}
 
-            {turns.map((turn) => (
-              <ChatTurn
-                key={turn.user?.turnId ?? turn.user?.id ?? turn.assistant?.id}
-                turn={turn}
-                streamingMessageId={streamingMessageId}
-              />
-            ))}
+            {turns.map((turn) => {
+              const isPending = pendingTurnId && turn.user?.turnId === pendingTurnId
+              if (isPending && !revealAnswer) {
+                if (!turn.user || turn.user.hidden) return null
+                return (
+                  <ChatTurn
+                    key={turn.user.turnId ?? turn.user.id}
+                    turn={{ user: turn.user, assistant: null }}
+                    streamingMessageId={null}
+                  />
+                )
+              }
+              return (
+                <ChatTurn
+                  key={turn.user?.turnId ?? turn.user?.id ?? turn.assistant?.id}
+                  turn={turn}
+                  streamingMessageId={streamingMessageId}
+                />
+              )
+            })}
 
-            {loading && !streamingMessageId && (
-              <div className="chat-content-width">
-                <AnalysisProgress progress={progress} currentStage={currentStage} />
-              </div>
-            )}
+            <AnimatePresence>
+              {loading && !revealAnswer && (
+                <motion.div
+                  key="thinking"
+                  className="chat-content-width py-8"
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -12 }}
+                  transition={{ duration: 0.35 }}
+                >
+                  <ThinkingPanel
+                    companyNames={selectedCompanies.map((company) => company.legalName)}
+                    currentStage={currentStage}
+                    progress={progress}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {error && (
               <motion.div

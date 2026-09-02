@@ -96,6 +96,7 @@ pub fn router(state: AppState) -> Router {
         .route("/search_company", get(probe_search))
         .route("/company_details", get(company_comprehensive_details))
         .route("/api/search/search_company", get(probe_search))
+        .route("/api/search/company_details", get(company_comprehensive_details))
         .route("/api/ollama/status", get(ollama::status))
         .route("/api/ollama/pull", post(ollama::pull))
         .route("/internal/reload-settings", post(reload_settings));

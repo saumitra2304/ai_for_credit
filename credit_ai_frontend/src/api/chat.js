@@ -91,10 +91,11 @@ async function readPlainResponse(response) {
 }
 
 export const ANALYSIS_STAGES = [
-  { id: 'fetch', label: 'Loading company data', weight: 10 },
-  { id: 'credit', label: 'Generating per-company credit answer', weight: 25 },
-  { id: 'financials', label: 'Analyzing per-company financial detail', weight: 30 },
-  { id: 'synthesis', label: 'Synthesizing final answer', weight: 25 },
+  { id: 'fetch', label: 'Loading company data', weight: 12 },
+  { id: 'credit', label: 'Generating per-company credit answer', weight: 22 },
+  { id: 'news', label: 'Gathering per-company news', weight: 16 },
+  { id: 'financials', label: 'Analyzing per-company financial detail', weight: 24 },
+  { id: 'synthesis', label: 'Synthesizing final answer', weight: 16 },
   { id: 'report', label: 'Finalizing credit assessment report', weight: 10 },
 ]
 
@@ -106,6 +107,9 @@ export function detectStreamStage(text) {
   }
   if (content.includes('# Per-Company Detail')) {
     return ANALYSIS_STAGES.find((stage) => stage.id === 'financials')
+  }
+  if (content.includes('# Per-Company News')) {
+    return ANALYSIS_STAGES.find((stage) => stage.id === 'news')
   }
   if (content.includes('# Per-Company Credit Answer')) {
     return ANALYSIS_STAGES.find((stage) => stage.id === 'credit')
@@ -130,16 +134,17 @@ export function getProgressForStage(stage) {
   return Math.min(completedWeight + Math.round(stage.weight * 0.6), 95)
 }
 
-export function createProgressSimulator(onProgress, onStageChange) {
-  let progress = 0
+export function createProgressSimulator(onProgress, onStageChange, initialStage) {
+  let progress = 5
   let cancelled = false
 
   const tick = setInterval(() => {
     if (cancelled) return
-    progress = Math.min(progress + 1, 8)
-    onProgress(progress)
-    onStageChange(ANALYSIS_STAGES[0])
-  }, 150)
+    const remaining = 32 - progress
+    progress = Math.min(progress + Math.max(0.18, remaining * 0.04), 32)
+    onProgress(Math.round(progress))
+    onStageChange(initialStage ?? ANALYSIS_STAGES[0])
+  }, 180)
 
   return {
     complete() {
