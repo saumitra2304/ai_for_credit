@@ -7,10 +7,8 @@ export async function fetchChatHistory() {
 }
 
 export async function fetchChatSession(chatId) {
-  const data = await fetchChatHistory()
-  const session = (Array.isArray(data) ? data : []).find(
-    (item) => String(item.chat_id) === String(chatId)
-  )
+  if (!chatId) return null
+  const session = await authJson(`${CHAT_HISTORY_BASE}/${encodeURIComponent(chatId)}`)
   return session ? parseChatSession(session) : null
 }
 
@@ -73,14 +71,15 @@ export function messageTrailToMessages(trail, chatId) {
 export function parseChatSession(session) {
   const trail = session.message_trail ?? []
   const companies = resolveCompanies(session)
-  const preview = trail[trail.length - 1]?.query ?? trail[0]?.query ?? 'Empty conversation'
+  const preview =
+    session.preview || trail[trail.length - 1]?.query || trail[0]?.query || 'Empty conversation'
 
   return {
     chatId: session.chat_id,
     preview,
-    messageCount: trail.length,
+    messageCount: session.message_count ?? trail.length,
     companies,
     messages: messageTrailToMessages(trail, session.chat_id),
-    updatedAt: trail.length > 0 ? trail[trail.length - 1]?.query : null,
+    updatedAt: session.updated_at ?? (trail.length > 0 ? trail[trail.length - 1]?.query : null),
   }
 }

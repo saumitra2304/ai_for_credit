@@ -43,6 +43,7 @@ fn load_desktop_env(app: &tauri::AppHandle) {
             candidates.push(dir.join("bundled.env"));
             candidates.push(dir.join(".env"));
             candidates.push(dir.join("../Resources/bundled.env"));
+            candidates.push(dir.join("resources/bundled.env"));
         }
     }
     let root = repo_root();
@@ -100,6 +101,8 @@ fn sidecar_binary(app: &tauri::AppHandle) -> Option<PathBuf> {
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             dirs.push(dir.join("../Resources/binaries"));
+            dirs.push(dir.join("resources/binaries"));
+            dirs.push(dir.join("binaries"));
             dirs.push(dir.to_path_buf());
         }
     }
@@ -159,6 +162,12 @@ fn spawn_python(
     {
         use std::os::unix::process::CommandExt;
         cmd.process_group(0);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
     }
 
     cmd.spawn()

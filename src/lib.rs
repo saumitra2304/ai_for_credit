@@ -98,6 +98,8 @@ pub fn router(state: AppState) -> Router {
         .route("/api/search/search_company", get(probe_search))
         .route("/api/search/company_details", get(company_comprehensive_details))
         .route("/api/ollama/status", get(ollama::status))
+        .route("/api/ollama/start", post(ollama::start))
+        .route("/api/ollama/warmup", post(ollama::warmup))
         .route("/api/ollama/pull", post(ollama::pull))
         .route("/internal/reload-settings", post(reload_settings));
 
@@ -105,6 +107,7 @@ pub fn router(state: AppState) -> Router {
         app = app
             .route("/api/chat", any(proxy_python))
             .route("/api/chat_history", any(proxy_python))
+            .route("/api/chat_history/{*path}", any(proxy_python))
             .route("/api/auth", any(proxy_python))
             .route("/api/auth/{*path}", any(proxy_python))
             .route("/api/admin", any(proxy_python))
@@ -147,6 +150,20 @@ pub async fn run_standalone() {
     serve(listener, state).await;
 }
 
+fn token_matches(got: &str, expected: &str) -> bool {
+    let a = got.as_bytes();
+    let b = expected.as_bytes();
+    if a.len() != b.len() {
+        let mut acc = 0u8;
+        for byte in b {
+            acc |= *byte;
+        }
+        let _ = acc;
+        return false;
+    }
+    a.iter().zip(b.iter()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+}
+
 async fn reload_settings() -> &'static str {
     "ok"
 }
@@ -163,7 +180,7 @@ async fn internal_token_middleware(
         .headers()
         .get("x-internal-token")
         .and_then(|value| value.to_str().ok())
-        .is_some_and(|got| got == state.internal_token);
+        .is_some_and(|got| token_matches(got, &state.internal_token));
     if !ok {
         return (StatusCode::UNAUTHORIZED, "invalid internal token").into_response();
     }

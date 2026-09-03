@@ -10,6 +10,30 @@ export async function fetchOllamaStatus() {
   return response.json()
 }
 
+export async function startOllama() {
+  const response = await fetch(apiUrl('/api/ollama/start'), {
+    method: 'POST',
+    headers: withInternalHeaders(),
+  })
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    throw new Error(payload.error || 'Failed to start Ollama')
+  }
+  return payload
+}
+
+export async function warmupOllama() {
+  const response = await fetch(apiUrl('/api/ollama/warmup'), {
+    method: 'POST',
+    headers: withInternalHeaders(),
+  })
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    throw new Error(payload.error || 'Failed to warm up the model')
+  }
+  return payload
+}
+
 export async function pullOllamaModel(name, onProgress) {
   const response = await fetch(apiUrl('/api/ollama/pull'), {
     method: 'POST',

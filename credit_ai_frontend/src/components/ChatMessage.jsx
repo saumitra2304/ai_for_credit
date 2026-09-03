@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { motion } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -26,7 +27,7 @@ const markdownComponents = {
   ),
 }
 
-export function ChatMessage({ role, content, isStreaming }) {
+export const ChatMessage = memo(function ChatMessage({ role, content, isStreaming }) {
   const isUser = role === 'user'
 
   return (
@@ -54,6 +55,8 @@ export function ChatMessage({ role, content, isStreaming }) {
           <div className="markdown-body text-[15px] leading-relaxed text-foreground/95">
             {isUser ? (
               <p className="whitespace-pre-wrap">{content}</p>
+            ) : isStreaming ? (
+              <p className="whitespace-pre-wrap">{content}</p>
             ) : (
               <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                 {content}
@@ -67,7 +70,7 @@ export function ChatMessage({ role, content, isStreaming }) {
       </div>
     </motion.div>
   )
-}
+})
 
 export function ChatTurn({ turn, streamingMessageId }) {
   return (

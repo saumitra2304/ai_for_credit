@@ -56,24 +56,48 @@ export async function streamChatMessage({
 
   const decoder = new TextDecoder()
   let fullText = ''
+  let lastPaint = 0
+  let paintTimer = null
+  const PAINT_MS = 48
 
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-
-    const chunk = decoder.decode(value, { stream: true })
-    fullText += chunk
-
-    const stage = detectStreamStage(fullText)
-    onStageChange?.(stage, fullText)
-    onChunk?.(chunk, fullText)
+  const emit = (chunk, force = false) => {
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now()
+    const flush = () => {
+      paintTimer = null
+      lastPaint = typeof performance !== 'undefined' ? performance.now() : Date.now()
+      onStageChange?.(detectStreamStage(fullText), fullText)
+      onChunk?.(chunk, fullText)
+    }
+    if (force || now - lastPaint >= PAINT_MS) {
+      if (paintTimer) {
+        clearTimeout(paintTimer)
+        paintTimer = null
+      }
+      flush()
+      return
+    }
+    if (!paintTimer) {
+      paintTimer = setTimeout(flush, PAINT_MS - (now - lastPaint))
+    }
   }
 
-  const trailing = decoder.decode()
-  if (trailing) {
-    fullText += trailing
-    onStageChange?.(detectStreamStage(fullText), fullText)
-    onChunk?.(trailing, fullText)
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      const chunk = decoder.decode(value, { stream: true })
+      fullText += chunk
+      emit(chunk)
+    }
+
+    const trailing = decoder.decode()
+    if (trailing) {
+      fullText += trailing
+    }
+    emit(trailing, true)
+  } finally {
+    if (paintTimer) clearTimeout(paintTimer)
   }
 
   return stripStreamPrefix(fullText)

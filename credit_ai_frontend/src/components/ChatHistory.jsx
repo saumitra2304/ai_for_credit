@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { fetchChatHistory, parseChatSession } from '@/api/chatHistory'
+import { fetchChatHistory, fetchChatSession, parseChatSession } from '@/api/chatHistory'
 import { formatChatIdLabel } from '@/lib/chatId'
 import { useAppStore } from '@/store/useAppStore'
 import { cn } from '@/lib/utils'
@@ -105,8 +105,15 @@ export function ChatHistory({ onSelectSession, onNewChat }) {
                 type="button"
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.04 }}
-                onClick={() => onSelectSession(session)}
+                transition={{ delay: Math.min(i, 8) * 0.04 }}
+                onClick={async () => {
+                  try {
+                    const full = await fetchChatSession(session.chatId)
+                    onSelectSession(full ?? session)
+                  } catch (err) {
+                    setError(err.message)
+                  }
+                }}
                 className={cn(
                   'w-full rounded-lg border px-2.5 py-2 text-left transition-all duration-200',
                   isActive

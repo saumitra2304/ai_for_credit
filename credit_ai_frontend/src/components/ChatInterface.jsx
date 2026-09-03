@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { ChatTurn } from '@/components/ChatMessage'
 import { CompanyCharts } from '@/components/CompanyCharts'
+import { LlmStartButton } from '@/components/LlmStartButton'
 import { ThinkingPanel } from '@/components/ThinkingPanel'
 import { KuberLogo } from '@/components/KuberLogo'
 import { useChatScroll } from '@/hooks/useChatScroll'
@@ -34,6 +35,7 @@ const SUGGESTED_PROMPTS = [
 ]
 
 const MIN_THINK_MS = 8000
+const FOLLOWUP_THINK_MS = 400
 
 export function ChatInterface() {
   const navigate = useNavigate()
@@ -100,7 +102,8 @@ export function ChatInterface() {
 
   useEffect(() => {
     if (messages.length === 0 && !loading) return
-    persistSessionDebounced({ interrupted: loading })
+    if (loading) return
+    persistSessionDebounced({ interrupted: false })
   }, [messages, loading, activeChatId, selectedCompanies, persistSessionDebounced])
 
   useEffect(() => {
@@ -145,6 +148,7 @@ export function ChatInterface() {
     setRevealAnswer(false)
     revealRef.current = false
     streamBufferRef.current = ''
+    const thinkFloor = hidePrompt ? MIN_THINK_MS : FOLLOWUP_THINK_MS
     thinkStartedRef.current = Date.now()
     enableAutoScroll()
 
@@ -181,7 +185,7 @@ export function ChatInterface() {
 
     const maybeReveal = (displayText, force = false) => {
       streamBufferRef.current = displayText
-      const waited = Date.now() - thinkStartedRef.current >= MIN_THINK_MS
+      const waited = Date.now() - thinkStartedRef.current >= thinkFloor
       if (!force && (!waited || isThinStream(displayText))) return
       if (!revealRef.current) {
         revealRef.current = true
@@ -194,7 +198,7 @@ export function ChatInterface() {
     if (revealTimerRef.current) clearTimeout(revealTimerRef.current)
     revealTimerRef.current = setTimeout(() => {
       if (streamBufferRef.current) maybeReveal(streamBufferRef.current)
-    }, MIN_THINK_MS + 80)
+    }, thinkFloor + 80)
 
     try {
       const response = await streamChatMessage({
@@ -220,7 +224,7 @@ export function ChatInterface() {
         },
       })
 
-      const remaining = MIN_THINK_MS - (Date.now() - thinkStartedRef.current)
+      const remaining = thinkFloor - (Date.now() - thinkStartedRef.current)
       if (remaining > 0) {
         await new Promise((resolve) => setTimeout(resolve, remaining))
       }
@@ -345,6 +349,7 @@ export function ChatInterface() {
               ? `${selectedCompanies.length} selected`
               : 'No company'}
           </Badge>
+          <LlmStartButton />
           {selectedCompanies.length > 0 && (
             <Tooltip>
               <TooltipTrigger asChild>

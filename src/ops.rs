@@ -9,6 +9,24 @@ use chrono::{SecondsFormat, Utc};
 use rusqlite::Connection;
 
 static SPAN_SEQ: AtomicU64 = AtomicU64::new(1);
+static TRIM_TICK: AtomicU64 = AtomicU64::new(0);
+
+struct KeyOverlay {
+    mtime_secs: u64,
+    probe: String,
+    insta: String,
+}
+
+static KEY_OVERLAY: Mutex<Option<KeyOverlay>> = Mutex::new(None);
+
+fn file_mtime_secs(path: &Path) -> u64 {
+    std::fs::metadata(path)
+        .and_then(|meta| meta.modified())
+        .ok()
+        .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0)
+}
 
 pub fn utc_now() -> String {
     Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true)
@@ -31,8 +49,29 @@ pub fn sqlite_path() -> PathBuf {
 }
 
 pub fn overlay_keys(path: &Path, probe: &mut String, insta: &mut String) {
+    let mtime = file_mtime_secs(path);
+    if let Ok(guard) = KEY_OVERLAY.lock() {
+        if let Some(cached) = guard.as_ref() {
+            if cached.mtime_secs == mtime && mtime != 0 {
+                if !cached.probe.is_empty() {
+                    *probe = cached.probe.clone();
+                }
+                if !cached.insta.is_empty() {
+                    *insta = cached.insta.clone();
+                }
+                return;
+            }
+        }
+    }
+
     let Ok(conn) = Connection::open(path) else {
         return;
+    };
+    let _ = conn.busy_timeout(Duration::from_millis(3000));
+    let mut overlay = KeyOverlay {
+        mtime_secs: mtime,
+        probe: String::new(),
+        insta: String::new(),
     };
     if let Ok(value) = conn.query_row(
         "SELECT value FROM app_settings WHERE key = 'probe_api_key'",
@@ -40,7 +79,8 @@ pub fn overlay_keys(path: &Path, probe: &mut String, insta: &mut String) {
         |row| row.get::<_, String>(0),
     ) {
         if !value.is_empty() {
-            *probe = value;
+            overlay.probe = value;
+            *probe = overlay.probe.clone();
         }
     }
     if let Ok(value) = conn.query_row(
@@ -49,8 +89,12 @@ pub fn overlay_keys(path: &Path, probe: &mut String, insta: &mut String) {
         |row| row.get::<_, String>(0),
     ) {
         if !value.is_empty() {
-            *insta = value;
+            overlay.insta = value;
+            *insta = overlay.insta.clone();
         }
+    }
+    if let Ok(mut guard) = KEY_OVERLAY.lock() {
+        *guard = Some(overlay);
     }
 }
 
@@ -122,6 +166,20 @@ pub fn headers_trace(headers: &HeaderMap) -> (String, Option<String>) {
     (trace, parent)
 }
 
+fn maybe_trim(conn: &Connection) {
+    if TRIM_TICK.fetch_add(1, Ordering::Relaxed) % 64 != 0 {
+        return;
+    }
+    let _ = conn.execute(
+        "DELETE FROM app_spans WHERE id NOT IN (SELECT id FROM app_spans ORDER BY id DESC LIMIT 10000)",
+        [],
+    );
+    let _ = conn.execute(
+        "DELETE FROM app_logs WHERE id NOT IN (SELECT id FROM app_logs ORDER BY id DESC LIMIT 20000)",
+        [],
+    );
+}
+
 fn record_span(
     path: &Path,
     trace_id: &str,
@@ -136,6 +194,7 @@ fn record_span(
     let Ok(conn) = Connection::open(path) else {
         return;
     };
+    let _ = conn.busy_timeout(Duration::from_millis(3000));
     let _ = conn.execute(
         "INSERT INTO app_spans (trace_id, span_id, parent_id, name, start_ts, end_ts, status, attrs_json)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
@@ -150,25 +209,25 @@ fn record_span(
             attrs_json
         ],
     );
-    let _ = conn.execute(
-        "DELETE FROM app_spans WHERE id NOT IN (SELECT id FROM app_spans ORDER BY id DESC LIMIT 10000)",
-        [],
-    );
+    maybe_trim(&conn);
 }
 
 fn record_log(path: &Path, level: &str, message: &str, request_id: Option<&str>) {
     let Ok(conn) = Connection::open(path) else {
         return;
     };
+    let _ = conn.busy_timeout(Duration::from_millis(3000));
+    let clipped = if message.len() > 2000 {
+        format!("{}…", &message[..2000])
+    } else {
+        message.to_string()
+    };
     let _ = conn.execute(
         "INSERT INTO app_logs (ts, level, source, message, request_id, extra_json)
          VALUES (?1, ?2, 'rust', ?3, ?4, NULL)",
-        rusqlite::params![utc_now(), level, message, request_id],
+        rusqlite::params![utc_now(), level, clipped, request_id],
     );
-    let _ = conn.execute(
-        "DELETE FROM app_logs WHERE id NOT IN (SELECT id FROM app_logs ORDER BY id DESC LIMIT 20000)",
-        [],
-    );
+    maybe_trim(&conn);
 }
 
 pub fn finish_call(

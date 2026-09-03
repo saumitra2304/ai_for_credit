@@ -3,7 +3,7 @@ import hmac
 import os
 import sys
 import time
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 import asyncio
@@ -15,15 +15,15 @@ from chat_completion_driver.open_ai import (
     FOLLOWUP_WEB_NOTE, plan_followup_web_search,
 )
 from sme_api.insta_summary_f import insta_summary
-from pydantic import BaseModel
-from sql_db.chat_store import get_chat, create_chat, update_chat, get_chat_history
+from pydantic import BaseModel, Field, field_validator
+from sql_db.chat_store import get_chat, create_chat, update_chat, list_chat_summaries
 from sme_api.probe24_comp_details import company_details
 from financial_flatten import flatten_company
 from credit_flatten import flatten_credit
 from news_flatten import fetch_company_news, flatten_news, fetch_topic_news, flatten_topic_news
 from sql_db import auth_store
-from sql_db.db import init_db_sync
-from sql_db import settings_store
+from sql_db.db import close_db, init_db_sync
+from sql_db import ops_store, settings_store
 from admin_routes import router as admin_router, observe_request
 from request_ctx import bind_request_id, log_event, span, agen_span
 
@@ -32,6 +32,7 @@ load_dotenv()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db_sync()
+    await ops_store.start_writer()
     await settings_store.load_cache()
     bootstrap_email = os.getenv("AUTH_BOOTSTRAP_EMAIL")
     bootstrap_password = os.getenv("AUTH_BOOTSTRAP_PASSWORD")
@@ -43,9 +44,13 @@ async def lifespan(app: FastAPI):
         )
     app.state.semaphore_sme_financials = asyncio.Semaphore(10)
     app.state.semaphore_news = asyncio.Semaphore(5)
-    app.state.client = aiohttp.ClientSession()
+    app.state.client = aiohttp.ClientSession(
+        timeout=aiohttp.ClientTimeout(total=120, connect=15, sock_read=90)
+    )
     yield
     await app.state.client.close()
+    await ops_store.stop_writer()
+    await close_db()
 
 app = FastAPI(lifespan=lifespan)
 
@@ -120,10 +125,43 @@ async def health():
     return {"ok": True}
 
 class ChatRequest(BaseModel):
-    cin_list: list[str]
-    query: str
+    cin_list: list[str] = Field(min_length=1, max_length=8)
+    query: str = Field(min_length=1, max_length=4000)
     chat_id: str | int
     stream: bool = True
+
+    @field_validator("query")
+    @classmethod
+    def _strip_query(cls, value: str) -> str:
+        text = value.strip()
+        if not text:
+            raise ValueError("query required")
+        return text
+
+    @field_validator("chat_id")
+    @classmethod
+    def _chat_id(cls, value):
+        key = str(value).strip()
+        if not key or len(key) > 80:
+            raise ValueError("invalid chat_id")
+        return key
+
+    @field_validator("cin_list")
+    @classmethod
+    def _clean_cins(cls, value: list[str]) -> list[str]:
+        seen = set()
+        out = []
+        for cin in value:
+            item = (cin or "").strip()
+            if not item or item in seen:
+                continue
+            if len(item) > 40:
+                raise ValueError("invalid CIN")
+            seen.add(item)
+            out.append(item)
+        if not out:
+            raise ValueError("cin_list required")
+        return out
 
 
 STREAM_HEADERS = {
@@ -771,31 +809,43 @@ async def credit_tool(
             traceback.print_exc(file=f)
         raise e
 
+def _public_company_cache(cache: dict | None) -> dict:
+    return {
+        cin: {
+            key: val
+            for key, val in (slot or {}).items()
+            if key in ("label", "credit", "news", "detail")
+        }
+        for cin, slot in (cache or {}).items()
+    }
+
+
 @app.get("/chat_history")
 async def chat_history(user_id: int = Depends(get_current_user_id)):
     try:
-        history = await get_chat_history(user_id)
-        return [
-            {
-                "user_id": chat.user_id,
-                "chat_id": chat.chat_id,
-                "message_trail": chat.message_trail,
-                "company_cache": {
-                    cin: {
-                        key: val
-                        for key, val in slot.items()
-                        if key in ("label", "credit", "news", "detail")
-                    }
-                    for cin, slot in (chat.company_cache or {}).items()
-                },
-            }
-            for chat in history
-        ]
+        return await list_chat_summaries(user_id)
     except Exception as e:
         import traceback
         with open("error.log", "a", encoding="utf-8") as f:
             traceback.print_exc(file=f)
         raise e
+
+
+@app.get("/chat_history/{chat_id}")
+async def chat_history_one(chat_id: str, user_id: int = Depends(get_current_user_id)):
+    if not chat_id or len(chat_id) > 80:
+        raise HTTPException(status_code=404, detail="Not found")
+    chat = await get_chat(user_id, chat_id)
+    if chat == 0:
+        raise HTTPException(status_code=404, detail="Not found")
+    return {
+        "user_id": chat.user_id,
+        "chat_id": chat.chat_id,
+        "message_trail": chat.message_trail,
+        "preview": (chat.message_trail[-1].get("query") if chat.message_trail else "") or "",
+        "message_count": len(chat.message_trail or []),
+        "company_cache": _public_company_cache(chat.company_cache),
+    }
 
 
 if __name__ == "__main__":
