@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Download, Loader2, Play, RefreshCw } from 'lucide-react'
+import { Download, Loader2, Play, Power, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { KuberLogo } from '@/components/KuberLogo'
@@ -10,6 +10,7 @@ import {
   progressFromPullEvent,
   pullOllamaModel,
   startOllama,
+  stopOllama,
   warmupOllama,
 } from '@/api/ollama'
 
@@ -84,6 +85,22 @@ export function OllamaGate({ children }) {
       await refresh()
     } finally {
       setBusy(false)
+    }
+  }
+
+  const handleStop = async () => {
+    setBusy(true)
+    setError('')
+    setPullLabel('Stopping Ollama…')
+    try {
+      await stopOllama()
+      await refresh()
+    } catch (err) {
+      setError(err.message || 'Could not stop the local model.')
+      await refresh()
+    } finally {
+      setBusy(false)
+      setPullLabel('')
     }
   }
 
@@ -166,6 +183,16 @@ export function OllamaGate({ children }) {
             )}
             Start LLM
           </Button>
+          {status?.running && (
+            <Button type="button" variant="outline" onClick={handleStop} disabled={working}>
+              {busy && !pulling ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Power className="h-4 w-4" />
+              )}
+              Stop LLM
+            </Button>
+          )}
           <Button type="button" variant="outline" onClick={refresh} disabled={working}>
             {loading ? (
               <Loader2 className="h-4 w-4 animate-spin" />

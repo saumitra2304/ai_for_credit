@@ -296,6 +296,105 @@ pub async fn start() -> Response {
         .into_response()
 }
 
+async fn unload_model(model: &str) {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(8))
+        .build();
+    let Ok(client) = client else {
+        return;
+    };
+    let _ = client
+        .post(format!("{OLLAMA}/api/generate"))
+        .json(&json!({
+            "model": model,
+            "prompt": "",
+            "stream": false,
+            "keep_alive": 0,
+            "options": { "num_predict": 0 }
+        }))
+        .send()
+        .await;
+}
+
+fn kill_managed() {
+    if let Ok(mut slot) = MANAGED.lock() {
+        if let Some(mut child) = slot.take() {
+            let pid = child.id();
+            #[cfg(unix)]
+            {
+                let _ = Command::new("pkill")
+                    .args(["-P", &pid.to_string()])
+                    .status();
+            }
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+}
+
+fn kill_ollama_processes() {
+    #[cfg(unix)]
+    {
+        for name in ["Ollama", "ollama"] {
+            let _ = Command::new("killall").args(["-q", name]).status();
+        }
+        let _ = Command::new("pkill").args(["-f", "ollama runner"]).status();
+        let _ = Command::new("pkill").args(["-f", "ollama serve"]).status();
+    }
+    #[cfg(windows)]
+    {
+        for image in ["ollama.exe", "Ollama.exe"] {
+            let mut cmd = Command::new("taskkill");
+            cmd.args(["/F", "/IM", image, "/T"]);
+            hide_window(&mut cmd);
+            let _ = cmd.status();
+        }
+    }
+}
+
+async fn wait_stopped(seconds: u64) -> bool {
+    let attempts = seconds.saturating_mul(4).max(1);
+    for _ in 0..attempts {
+        if ollama_tags().await.is_none() && !port_open() {
+            return true;
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+    ollama_tags().await.is_none()
+}
+
+pub async fn stop() -> Response {
+    if ollama_tags().await.is_some() {
+        unload_model(&expected_model()).await;
+    }
+    kill_managed();
+    kill_ollama_processes();
+    let stopped = wait_stopped(12).await;
+    let running = !stopped && ollama_tags().await.is_some();
+    let status = if running {
+        StatusCode::BAD_GATEWAY
+    } else {
+        StatusCode::OK
+    };
+    (
+        status,
+        Json(json!({
+            "ok": !running,
+            "running": running,
+            "model": expected_model(),
+            "installed": false,
+            "binary_found": find_ollama().is_some(),
+            "managed": false,
+            "error": if running {
+                Some("Ollama did not stop. Some processes may still be running.")
+            } else {
+                None
+            },
+        })),
+    )
+        .into_response()
+}
+
 pub async fn warmup() -> Response {
     let model = expected_model();
     let client = reqwest::Client::builder()

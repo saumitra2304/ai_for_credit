@@ -22,6 +22,18 @@ export async function startOllama() {
   return payload
 }
 
+export async function stopOllama() {
+  const response = await fetch(apiUrl('/api/ollama/stop'), {
+    method: 'POST',
+    headers: withInternalHeaders(),
+  })
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    throw new Error(payload.error || 'Failed to stop Ollama')
+  }
+  return payload
+}
+
 export async function warmupOllama() {
   const response = await fetch(apiUrl('/api/ollama/warmup'), {
     method: 'POST',
