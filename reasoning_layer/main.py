@@ -17,6 +17,7 @@ from chat_completion_driver.open_ai import (
 from sme_api.insta_summary_f import insta_summary
 from pydantic import BaseModel, Field, field_validator
 from sql_db.chat_store import get_chat, create_chat, update_chat, list_chat_summaries
+from state_models import chat_memory
 from sme_api.probe24_comp_details import company_details
 from financial_flatten import flatten_company
 from credit_flatten import flatten_credit
@@ -249,19 +250,35 @@ def _is_followup(chat_history, cache: dict, cin_list: list[str]) -> bool:
 
 
 def _followup_context(cin_list, cache):
+    """Filings tables only. Full prior write-ups make the model ignore the new question."""
     parts = []
     for cin in cin_list:
         slot = cache.get(cin, {})
         label = slot.get("label", cin)
-        if slot.get("flat"):
-            parts.append(f"### {label} — financials\n{slot['flat']}")
-        if slot.get("credit"):
-            parts.append(f"### {label} — credit (prior analysis)\n{slot['credit']}")
-        if slot.get("news"):
-            parts.append(f"### {label} — news (prior analysis)\n{slot['news']}")
-        if slot.get("detail"):
-            parts.append(f"### {label} — prior financial analysis\n{slot['detail']}")
+        flat = (slot.get("flat") or "").strip()
+        if flat:
+            parts.append(f"### {label} — standalone filings\n{flat}")
+        else:
+            parts.append(f"### {label}\nCIN {cin}. No standalone tables in cache.")
     return "\n\n".join(parts)
+
+
+def _slim_followup_history(chat_history):
+    trail = []
+    for item in (chat_history.message_trail or [])[-2:]:
+        trail.append(
+            {
+                "query": (item.get("query") or "")[:400],
+                "response": (item.get("response") or "")[:2500],
+            }
+        )
+    return chat_memory(
+        user_id=chat_history.user_id,
+        chat_id=chat_history.chat_id,
+        sme_data={},
+        message_trail=trail,
+        company_cache={},
+    )
 
 
 async def _followup_web_search(query: str, cache: dict, cin_list: list[str], client) -> str:
@@ -272,7 +289,7 @@ async def _followup_web_search(query: str, cache: dict, cin_list: list[str], cli
     ]
     queries = await plan_followup_web_search(query, names)
     if not queries:
-        print("[followup] no web search (answerable from filings)", file=sys.stderr, flush=True)
+        print("[followup] planner empty; no extra web search", file=sys.stderr, flush=True)
         return ""
     print(f"[followup] web search {queries}", file=sys.stderr, flush=True)
     pairs = await fetch_topic_news(client, queries, app.state.semaphore_news)
@@ -335,14 +352,20 @@ async def _chat_stream(request: ChatRequest, user_id: int):
             await log_event("error", "agent", f"Follow-up web search failed: {exc}")
             web_block = ""
         if web_block:
-            context = f"{context}\n\n### Web search\n{web_block}"
+            context = f"### Web search\n{web_block}\n\n{context}"
             instruction = FOLLOWUP_INSTRUCTION + FOLLOWUP_WEB_NOTE
+        followup_query = (
+            f"Answer only this follow-up:\n{request.query}\n\n"
+            "Use the reference data below only where this question needs it. "
+            "Do not retell the first credit analysis."
+        )
         body = ""
         started = False
         async for chunk in agen_span(
             "followup.answer",
             chat_endpoint_stream(
-                request.query, [context], chat_history, is_final=True,
+                followup_query, [context], _slim_followup_history(chat_history),
+                is_final=True,
                 instruction=instruction,
             ),
         ):

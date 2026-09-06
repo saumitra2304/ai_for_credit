@@ -97,7 +97,11 @@ export async function streamChatMessage({
     }
     emit(trailing, true)
   } finally {
-    if (paintTimer) clearTimeout(paintTimer)
+    if (paintTimer) {
+      clearTimeout(paintTimer)
+      onStageChange?.(detectStreamStage(fullText), fullText)
+      onChunk?.('', fullText)
+    }
   }
 
   return stripStreamPrefix(fullText)

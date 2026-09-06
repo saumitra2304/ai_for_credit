@@ -55,8 +55,6 @@ export const ChatMessage = memo(function ChatMessage({ role, content, isStreamin
           <div className="markdown-body text-[15px] leading-relaxed text-foreground/95">
             {isUser ? (
               <p className="whitespace-pre-wrap">{content}</p>
-            ) : isStreaming ? (
-              <p className="whitespace-pre-wrap">{content}</p>
             ) : (
               <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                 {content}

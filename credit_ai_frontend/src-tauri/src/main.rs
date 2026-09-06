@@ -73,6 +73,65 @@ fn env_flag(name: &str) -> &'static str {
     }
 }
 
+fn exe_stamp() -> (String, u64, u64) {
+    let path = std::env::current_exe().unwrap_or_default();
+    let meta = std::fs::metadata(&path).ok();
+    let modified = meta
+        .as_ref()
+        .and_then(|info| info.modified().ok())
+        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0);
+    let len = meta.map(|info| info.len()).unwrap_or(0);
+    (path.display().to_string(), modified, len)
+}
+
+fn wipe_sqlite_dir(dir: &Path) {
+    for name in [
+        "credit_ai.db",
+        "credit_ai.db-wal",
+        "credit_ai.db-shm",
+        "python.log",
+    ] {
+        let _ = std::fs::remove_file(dir.join(name));
+    }
+}
+
+fn packaged_sqlite(app: &tauri::AppHandle) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let dir = app.path().app_data_dir()?;
+    std::fs::create_dir_all(&dir)?;
+    let db = dir.join("credit_ai.db");
+    let marker = dir.join("app-instance.json");
+    let stamp = exe_stamp();
+    let previous = std::fs::read_to_string(&marker).ok().and_then(|raw| {
+        let value: serde_json::Value = serde_json::from_str(&raw).ok()?;
+        Some((
+            value.get("exe")?.as_str()?.to_string(),
+            value.get("modified")?.as_u64()?,
+            value.get("len")?.as_u64()?,
+        ))
+    });
+    let leftover = db.exists() && previous.is_none();
+    let replaced = previous.as_ref().is_some_and(|prev| *prev != stamp);
+    if leftover || replaced {
+        eprintln!(
+            "resetting local sqlite leftover={} replaced={}",
+            leftover, replaced
+        );
+        wipe_sqlite_dir(&dir);
+    }
+    let _ = std::fs::write(
+        marker,
+        serde_json::json!({
+            "exe": stamp.0,
+            "modified": stamp.1,
+            "len": stamp.2,
+        })
+        .to_string(),
+    );
+    Ok(db)
+}
+
 fn random_token() -> String {
     format!(
         "{}{}",
@@ -229,9 +288,7 @@ fn main() {
             let sqlite = if cfg!(debug_assertions) {
                 reasoning_dir().join("credit_ai_db.db")
             } else {
-                let dir = app.path().app_data_dir()?;
-                std::fs::create_dir_all(&dir)?;
-                dir.join("credit_ai.db")
+                packaged_sqlite(app.handle())?
             };
 
             let use_ephemeral = !cfg!(debug_assertions);

@@ -25,7 +25,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["app", "nsis"],
+    "targets": ["app", "dmg", "nsis"],
     "resources": ["bundled.env", "binaries/*"],
     "windows": {
       "nsis": {

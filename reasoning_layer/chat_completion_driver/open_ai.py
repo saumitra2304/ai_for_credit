@@ -29,7 +29,7 @@ def _llm_client_and_model():
 MAX_TOKENS_EXTRACT = 1200
 MAX_TOKENS_AGENT = 4000       # credit / news custom-instruction calls
 MAX_TOKENS_FINAL = 8000       # is_final financial analysis only
-MAX_TOKENS_PLAN = 250         # follow-up search planner JSON
+MAX_TOKENS_PLAN = 400         # follow-up keyword planner JSON
 
 # ~4 chars per token. 32k context minus room for the response.
 CHAR_BUDGET = 100_000
@@ -101,54 +101,63 @@ EXTRACT_INSTRUCTION = (
 
 
 FOLLOWUP_INSTRUCTION = (
-    "You are a credit analyst continuing an existing conversation about Indian "
-    "corporates.\n"
-    "The user is asking a follow-up question. Answer ONLY what they asked — "
-    "be direct and specific.\n\n"
-    "Do NOT reproduce financial summary tables, full trend-analysis write-ups, "
-    "credit rating dumps, or news recaps already covered in the previous "
-    "conversation. Do not restart with 'FINANCIAL SUMMARY TABLES' or similar "
-    "section headers unless the user explicitly asks for tables again.\n\n"
-    "Use the company data below and the previous conversation for context. "
-    "Cite specific figures where relevant.\n"
+    "You are a credit analyst answering ONE follow-up question about Indian "
+    "corporates already analysed in this chat.\n"
+    "Answer that question only. Be direct. Cite figures only when the question "
+    "needs them.\n\n"
+    "Do not restart a full credit report. Do not paste FINANCIAL SUMMARY TABLES, "
+    "trend write-ups, rating dumps, or news recaps unless the user asked for "
+    "that specific thing.\n"
+    "Standalone filings are tables only. They do not contain news, corporate "
+    "actions, board or management changes, or annual-report commentary.\n"
+    "When a Web search block is present, that is the primary source for those "
+    "topics. Summarise what the articles say and cite title, source, and date. "
+    "Do not invent headlines. Do not say the information is unavailable if "
+    "Web search has articles.\n"
+    "Only say searches found nothing if Web search is missing or lists no articles.\n"
     "/no_think"
 )
 
 
 FOLLOWUP_WEB_NOTE = (
-    "\n\nRecent web/news search results for this follow-up are included under "
-    "Web search. They were chosen from the user's question. Use them for "
-    "current, market, sector, peer, or macro facts. Do not invent headlines. "
-    "Prefer these over older prior-news summaries when they conflict.\n"
+    "\n\nWeb search results are included below. Queries were planned from "
+    "the meaning of this follow-up. Use those articles as the main evidence. "
+    "Do not claim there were no search results.\n"
 )
 
 
 SEARCH_PLAN_INSTRUCTION = (
-    "You plan Google News searches for a credit-analyst follow-up.\n"
-    "Filings, ratings, and prior analysis for the named companies are already "
-    "available. Do not search for figures that live in those filings "
-    "(P&L, ratios, leverage, working-capital days, existing rating tables).\n\n"
-    "Search when the question needs CURRENT or EXTERNAL facts: news, markets, "
-    "the company's industry/sector (whatever it is), macro, policy, rates, "
-    "peers, competitors, prices, demand, regulation, or latest events.\n"
-    "This must work for any company and any industry — infer the right topics "
-    "from the user's question and the company names. Do not assume real estate, "
-    "or any other sector.\n\n"
-    "If search is needed, write 1 to 3 short Google News query strings that "
-    "would retrieve those facts. Queries must follow from the question "
-    "(include a company name only when it helps). Do not copy the user "
-    "question verbatim unless it is already a good search.\n"
-    "If the question can be answered from the existing company analysis alone, "
-    "set search=false and queries=[].\n\n"
+    "You plan web searches for a follow-up question about named companies.\n"
+    "Understand the user's intent — what they actually want to know. Then write "
+    "1 to 3 short search queries that would retrieve recent news or pages about "
+    "that intent. Each query is a company name plus the topic, 3 to 8 words.\n"
+    "Never copy the user's question. Never write a full sentence. "
+    "Do not use a canned industry list. Derive topics only from this question.\n"
+    "Set search=false only if they ask solely for a figure already in filings.\n\n"
     "Output ONLY JSON, no markdown:\n"
-    '{"search": true, "queries": ["query one", "query two"]}\n'
+    '{"search": true, "queries": ["<Company> <topic>", "<Company> <topic two>"]}\n'
     "or\n"
     '{"search": false, "queries": []}\n'
     "/no_think"
 )
 
 
-def _parse_search_plan(raw: str) -> list[str]:
+SEARCH_PLAN_RETRY = (
+    "Your last reply was not usable. Infer the topics from the question's "
+    "meaning and output ONLY JSON with 1 to 3 short search queries. Include "
+    "the company name in each query. Do not copy the question.\n"
+    '{"search": true, "queries": ["..."]}\n'
+    "/no_think"
+)
+
+
+def _normalize_query(item) -> str:
+    if not isinstance(item, str):
+        return ""
+    return " ".join(item.split())[:160]
+
+
+def _parse_search_plan(raw: str, user_question: str, company_names: list[str]) -> list[str]:
     text = strip_thinking(raw)
     start = text.find("{")
     end = text.rfind("}")
@@ -158,28 +167,51 @@ def _parse_search_plan(raw: str) -> list[str]:
         data = json.loads(text[start:end + 1])
     except json.JSONDecodeError:
         return []
-    if not data.get("search"):
-        return []
+    question = " ".join((user_question or "").split()).lower()
+    names = [n for n in company_names if n]
+    items = list(data.get("queries") or []) + list(data.get("keywords") or [])
     out = []
     seen = set()
-    for item in data.get("queries") or []:
-        if not isinstance(item, str):
+    for item in items:
+        query = _normalize_query(item)
+        if len(query) < 3:
             continue
-        query = " ".join(item.split())[:160]
-        key = query.lower()
-        if len(query) < 3 or key in seen:
+        low = query.lower()
+        if question and (low == question or (len(question) > 24 and question in low)):
             continue
-        seen.add(key)
+        if names and not any(name.lower() in low for name in names):
+            query = f"{names[0]} {query}"[:160]
+            low = query.lower()
+        if low in seen:
+            continue
+        seen.add(low)
         out.append(query)
         if len(out) >= 3:
             break
+    if data.get("search") is False and not out:
+        return []
     return out
 
 
+async def _llm_plan_once(messages) -> str:
+    llm, model_name = _llm_client_and_model()
+    response = await llm.chat.completions.create(
+        model=model_name,
+        messages=messages,
+        max_tokens=MAX_TOKENS_PLAN,
+        temperature=0.1,
+        stream=False,
+    )
+    if not response.choices:
+        return ""
+    return response.choices[0].message.content or ""
+
+
 async def plan_followup_web_search(query: str, company_names: list[str]) -> list[str]:
-    """Semantically decide whether to search and which Google News queries to run."""
-    names = ", ".join(n for n in company_names if n) or "(none)"
-    user_content = f"Companies: {names}\nQuestion: {query}"
+    """Model infers search topics from the question; those queries are searched."""
+    names = [n for n in company_names if n]
+    listed = ", ".join(names) or "(none)"
+    user_content = f"Companies: {listed}\nQuestion: {query}"
     messages = [
         {"role": "system", "content": SEARCH_PLAN_INSTRUCTION},
         {"role": "user", "content": user_content},
@@ -187,25 +219,26 @@ async def plan_followup_web_search(query: str, company_names: list[str]) -> list
     try:
         from request_ctx import span, log_event
 
-        llm, model_name = _llm_client_and_model()
         _log(f"[search-plan] {user_content}")
         async with span("search.plan", question=query[:160]):
-            response = await llm.chat.completions.create(
-                model=model_name,
-                messages=messages,
-                max_tokens=MAX_TOKENS_PLAN,
-                temperature=0.1,
-                stream=False,
-            )
-            raw = ""
-            if response.choices:
-                raw = response.choices[0].message.content or ""
-            queries = _parse_search_plan(raw)
+            raw = await _llm_plan_once(messages)
+            queries = _parse_search_plan(raw, query, names)
+            if not queries:
+                _log("[search-plan] first pass unused; retrying model")
+                messages = [
+                    {"role": "system", "content": SEARCH_PLAN_RETRY},
+                    {"role": "user", "content": user_content},
+                    {"role": "assistant", "content": raw or "(empty)"},
+                    {
+                        "role": "user",
+                        "content": "Rewrite as the JSON search plan only.",
+                    },
+                ]
+                raw = await _llm_plan_once(messages)
+                queries = _parse_search_plan(raw, query, names)
             _log(f"[search-plan] queries={queries}")
             if queries:
                 await log_event("info", "search", f"planned searches: {queries}")
-            else:
-                await log_event("info", "search", "no web search needed for follow-up")
             return queries
     except asyncio.CancelledError:
         raise

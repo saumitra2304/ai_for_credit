@@ -30,8 +30,9 @@ async def fetch_news(
     client: ClientSession,
     queries: List[str],
     semaphore: asyncio.Semaphore,
+    engine: str = "google_news",
 ) -> List[Dict[str, Any]]:
-    tasks = [_fetch_one(client, q, semaphore) for q in queries]
+    tasks = [_fetch_one(client, q, semaphore, engine) for q in queries]
     return await asyncio.gather(*tasks)
 
 
@@ -39,13 +40,14 @@ async def _fetch_one(
     client: ClientSession,
     query: str,
     semaphore: asyncio.Semaphore,
+    engine: str = "google_news",
 ) -> Dict[str, Any]:
     api_key = get_setting("SEARCH_API_KEY")
     if not api_key:
         await log_event("warn", "search", "SEARCH_API_KEY missing; skipping web search")
         return {"query": query, "error": True, "organic_results": []}
     params = {
-        "engine": "google_news",
+        "engine": engine,
         "q": query,
         "location": "India",
         "gl": "in",
@@ -53,7 +55,7 @@ async def _fetch_one(
         "api_key": api_key,
     }
     async with semaphore:
-        async with span("web_search", query=query[:120], engine="google_news"):
+        async with span("web_search", query=query[:120], engine=engine):
             try:
                 async with client.get(SEARCH_URL, params=params) as resp:
                     resp.raise_for_status()

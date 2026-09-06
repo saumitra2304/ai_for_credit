@@ -9,6 +9,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { ChatTurn } from '@/components/ChatMessage'
 import { CompanyCharts } from '@/components/CompanyCharts'
 import { LlmStartButton } from '@/components/LlmStartButton'
+import { ThemeToggle } from '@/components/ThemeToggle'
 import { ThinkingPanel } from '@/components/ThinkingPanel'
 import { KuberLogo } from '@/components/KuberLogo'
 import { useChatScroll } from '@/hooks/useChatScroll'
@@ -350,6 +351,7 @@ export function ChatInterface() {
               : 'No company'}
           </Badge>
           <LlmStartButton />
+          <ThemeToggle />
           {selectedCompanies.length > 0 && (
             <Tooltip>
               <TooltipTrigger asChild>

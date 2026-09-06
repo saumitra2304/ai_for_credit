@@ -52,6 +52,9 @@ MAX_MSME_TREND_PERIODS = 4
 MAX_MSME_SUPPLIERS = 15
 MAX_LEGAL_CASES = 12
 MAX_LEGAL_FIELD_CHARS = 50
+MAX_DIRECTORS = 25
+MAX_BOARD_EVENTS = 20
+MAX_ALLOTMENTS = 8
 
 
 def _fmt(v):
@@ -122,6 +125,110 @@ def flatten_msme_delays(data, max_trend=MAX_MSME_TREND_PERIODS,
     return lines
 
 
+def flatten_governance(data):
+    """MCA board roster, role changes, allotments, and statutory filing dates.
+
+    These live on company_details but were dropped from the financial table, so
+    follow-ups about directors / governance / annual filings had nothing to cite.
+    """
+    lines = []
+    signatories = [
+        row for row in (data.get("authorized_signatories") or [])
+        if isinstance(row, dict)
+    ]
+    if signatories:
+        current = [s for s in signatories if not s.get("date_of_cessation")]
+        ceased = [s for s in signatories if s.get("date_of_cessation")]
+        lines.append(
+            f"-- BOARD / SIGNATORIES -- current {len(current)} | ceased {len(ceased)}"
+        )
+        for person in current[:MAX_DIRECTORS]:
+            lines.append(
+                f"{person.get('name')} | {person.get('designation')} | "
+                f"DIN {person.get('din') or 'n/a'} | "
+                f"appointed {person.get('date_of_appointment') or 'n/a'} | "
+                f"current role since "
+                f"{person.get('date_of_appointment_for_current_designation') or 'n/a'}"
+            )
+        omitted = len(current) - MAX_DIRECTORS
+        if omitted > 0:
+            lines.append(f"... {omitted} more current directors not shown")
+        for person in ceased[:8]:
+            lines.append(
+                f"{person.get('name')} | {person.get('designation')} | "
+                f"ceased {person.get('date_of_cessation')} | "
+                f"appointed {person.get('date_of_appointment') or 'n/a'}"
+            )
+
+        events = []
+        for person in signatories:
+            for ev in person.get("association_history") or []:
+                if not isinstance(ev, dict):
+                    continue
+                date = ev.get("event_date") or ""
+                if not date:
+                    continue
+                events.append((
+                    date,
+                    person.get("name"),
+                    ev.get("designation_after_event") or person.get("designation"),
+                    ev.get("event"),
+                ))
+        events.sort(key=lambda row: row[0], reverse=True)
+        if events:
+            lines.append("-- BOARD ROLE CHANGES (MCA association history) --")
+            seen = set()
+            kept = 0
+            for date, name, desig, event in events:
+                key = (date, name, desig)
+                if key in seen:
+                    continue
+                seen.add(key)
+                extra = f" | {event}" if event else ""
+                lines.append(f"{date} | {name} | {desig}{extra}")
+                kept += 1
+                if kept >= MAX_BOARD_EVENTS:
+                    break
+
+    allotments = [
+        row for row in (data.get("securities_allotment") or [])
+        if isinstance(row, dict)
+    ]
+    if allotments:
+        lines.append(f"-- SECURITIES ALLOTMENT -- {len(allotments)} records")
+        for row in allotments[:MAX_ALLOTMENTS]:
+            bits = [
+                row.get("date") or row.get("allotment_date") or row.get("year"),
+                row.get("instrument") or row.get("security_type"),
+                row.get("particulars") or row.get("description"),
+                row.get("number_of_shares") or row.get("shares"),
+            ]
+            line = " | ".join(str(bit) for bit in bits if bit)
+            if line:
+                lines.append(line)
+
+    filing = data.get("filing_dates") or {}
+    if isinstance(filing, dict) and filing:
+        aoc = filing.get("aoc_4") or {}
+        mgt = filing.get("mgt_7") or {}
+        if aoc or mgt:
+            lines.append(
+                "-- STATUTORY FILING DATES -- "
+                "(MCA AOC-4 / MGT-7, not the listed-company annual-report PDF)"
+            )
+            if isinstance(aoc, dict) and (aoc.get("financial_year") or aoc.get("filing_date")):
+                lines.append(
+                    f"AOC-4 financial statements | FY {aoc.get('financial_year')} | "
+                    f"filed {aoc.get('filing_date')}"
+                )
+            if isinstance(mgt, dict) and (mgt.get("financial_year") or mgt.get("filing_date")):
+                lines.append(
+                    f"MGT-7 annual return | FY {mgt.get('financial_year')} | "
+                    f"filed {mgt.get('filing_date')}"
+                )
+    return lines
+
+
 def flatten_legal_history(data, max_cases=MAX_LEGAL_CASES):
     """Compact probe legal_history rows, prioritising pending/high-severity cases."""
     legal = data.get("legal_history") or []
@@ -189,20 +296,23 @@ def flatten_company(entry, nature="STANDALONE", years=("2025", "2024", "2023")):
             if str(f.get("year", "")).startswith(y):
                 per_year[y] = f
                 break
+    header = [
+        f"COMPANY: {company.get('legal_name')} | CIN {company.get('cin')}",
+        (
+            f"Status {company.get('efiling_status')} | Incorporated "
+            f"{company.get('incorporation_date')} | {company.get('classification')}"
+        ),
+        (
+            f"Paid-up capital {_fmt(company.get('paid_up_capital'))} | "
+            f"Authorized {_fmt(company.get('authorized_capital'))} | "
+            f"Charges {_fmt(company.get('sum_of_charges'))}"
+        ),
+    ]
+    governance = flatten_governance(data)
     if not per_year:
-        return ""
+        return "\n".join(header + ([""] + governance if governance else []))
 
-    out = []
-    out.append(f"COMPANY: {company.get('legal_name')} | CIN {company.get('cin')}")
-    out.append(
-        f"Status {company.get('efiling_status')} | Incorporated "
-        f"{company.get('incorporation_date')} | {company.get('classification')}"
-    )
-    out.append(
-        f"Paid-up capital {_fmt(company.get('paid_up_capital'))} | "
-        f"Authorized {_fmt(company.get('authorized_capital'))} | "
-        f"Charges {_fmt(company.get('sum_of_charges'))}"
-    )
+    out = list(header)
     out.append(f"Basis: {nature}. All figures INR absolute unless a ratio/percentage.")
     out.append("")
     out.append("METRIC | " + " | ".join(per_year.keys()))
@@ -241,6 +351,7 @@ def flatten_company(entry, nature="STANDALONE", years=("2025", "2024", "2023")):
 
     ratings = data.get("credit_ratings") or []
     out.append(f"-- CREDIT RATINGS -- {'none on record' if not ratings else len(ratings)}")
+    out.extend(governance)
 
     return "\n".join(out)
 

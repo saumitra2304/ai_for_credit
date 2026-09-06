@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { ThemeToggle } from '@/components/ThemeToggle'
 import * as adminApi from '@/api/admin'
 
 const SETTING_LABELS = {
@@ -47,7 +48,10 @@ export function AdminPage() {
           </Button>
           <h1 className="text-sm font-semibold">Admin</h1>
         </div>
-        <p className="text-xs text-muted-foreground">Keys, logs, traces, and metrics</p>
+        <div className="flex items-center gap-2">
+          <p className="text-xs text-muted-foreground">Keys, logs, traces, and metrics</p>
+          <ThemeToggle />
+        </div>
       </header>
 
       <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col px-5 py-4">

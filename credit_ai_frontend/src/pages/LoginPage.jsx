@@ -4,6 +4,7 @@ import { Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { KuberLogo } from '@/components/KuberLogo'
+import { ThemeToggle } from '@/components/ThemeToggle'
 import { useAuthStore } from '@/store/useAuthStore'
 
 export function LoginPage() {
@@ -34,6 +35,9 @@ export function LoginPage() {
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4">
       <div className="mesh-bg pointer-events-none absolute inset-0" />
+      <div className="absolute right-4 top-4 z-10">
+        <ThemeToggle className="h-8 w-8" />
+      </div>
       <div className="glass-panel relative w-full max-w-md rounded-2xl border p-8 shadow-xl">
         <div className="mb-8 flex flex-col items-center text-center">
           <KuberLogo size={44} showWordmark />
