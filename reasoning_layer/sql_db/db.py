@@ -149,7 +149,7 @@ def _backfill_chat_index(conn: sqlite3.Connection) -> None:
             cache = {}
         preview = ""
         if isinstance(trail, list) and trail:
-            preview = str((trail[-1] or {}).get("query") or "")[:240]
+            preview = str((trail[0] or {}).get("query") or "")[:240]
         labels = []
         if isinstance(cache, dict):
             for cin, slot in cache.items():

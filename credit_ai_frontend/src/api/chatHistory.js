@@ -72,7 +72,7 @@ export function parseChatSession(session) {
   const trail = session.message_trail ?? []
   const companies = resolveCompanies(session)
   const preview =
-    session.preview || trail[trail.length - 1]?.query || trail[0]?.query || 'Empty conversation'
+    session.preview || trail[0]?.query || trail[trail.length - 1]?.query || 'Empty conversation'
 
   return {
     chatId: session.chat_id,

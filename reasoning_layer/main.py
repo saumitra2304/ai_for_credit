@@ -357,8 +357,6 @@ async def _chat_stream(request: ChatRequest, user_id: int):
         chat_history.message_trail.append(
             {"query": request.query, "response": chat_response}
         )
-        if len(chat_history.message_trail) > 2:
-            chat_history.message_trail = chat_history.message_trail[-2:]
         await update_chat(chat_history)
         print("", file=sys.stderr, flush=True)
         return
@@ -407,8 +405,6 @@ async def _chat_stream(request: ChatRequest, user_id: int):
     chat_history.message_trail.append(
         {"query": request.query, "response": chat_response}
     )
-    if len(chat_history.message_trail) > 2:
-        chat_history.message_trail = chat_history.message_trail[-2:]
     await update_chat(chat_history)
     print("", file=sys.stderr, flush=True)
 
@@ -483,7 +479,7 @@ async def chat_history_one(chat_id: str, user_id: int = Depends(get_current_user
         "user_id": chat.user_id,
         "chat_id": chat.chat_id,
         "message_trail": chat.message_trail,
-        "preview": (chat.message_trail[-1].get("query") if chat.message_trail else "") or "",
+        "preview": (chat.message_trail[0].get("query") if chat.message_trail else "") or "",
         "message_count": len(chat.message_trail or []),
         "company_cache": _public_company_cache(chat.company_cache),
     }

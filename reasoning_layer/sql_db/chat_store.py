@@ -24,7 +24,7 @@ def _index_fields(chat: chat_memory) -> tuple[str, str, int]:
     cache = chat.company_cache if isinstance(chat.company_cache, dict) else {}
     preview = ""
     if trail:
-        preview = str((trail[-1] or {}).get("query") or "")[:240]
+        preview = str((trail[0] or {}).get("query") or "")[:240]
     labels = [
         {"cin": cin, "label": (slot or {}).get("label") or cin}
         for cin, slot in cache.items()
