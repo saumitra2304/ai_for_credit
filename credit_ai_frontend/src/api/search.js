@@ -1,4 +1,4 @@
-import { apiUrl, withInternalHeaders } from '@/lib/runtime'
+import { authFetch } from '@/api/client'
 
 const SEARCH_BASE = '/api/search/search_company'
 
@@ -10,9 +10,7 @@ export async function searchCompanies(query, limit = 25) {
     })
   )
 
-  const response = await fetch(apiUrl(`${SEARCH_BASE}?limit=${limit}&filters=${filters}`), {
-    headers: withInternalHeaders(),
-  })
+  const response = await authFetch(`${SEARCH_BASE}?limit=${limit}&filters=${filters}`)
 
   if (!response.ok) {
     throw new Error(`Search failed: ${response.statusText}`)

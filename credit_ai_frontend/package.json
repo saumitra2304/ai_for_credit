@@ -7,11 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "oxlint",
-    "preview": "vite preview",
-    "tauri": "tauri",
-    "desktop:dev": "tauri dev",
-    "desktop:build": "node src-tauri/scripts/bundle-env.mjs && tauri build --bundles app && node src-tauri/scripts/sign-macos.mjs",
-    "desktop:build:windows": "node src-tauri/scripts/bundle-env.mjs && tauri build --bundles nsis"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.2.6",
@@ -36,7 +32,6 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
-    "@tauri-apps/cli": "^2",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.4",

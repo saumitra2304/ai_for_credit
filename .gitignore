@@ -1,25 +1,22 @@
-# Rust build artifacts
+# Rust / Python / Node build artifacts
 target/
-
-# Python cache and byte-code files
 __pycache__/
 *.py[cod]
 *$py.class
+node_modules/
+dist/
+**/dist/
+reasoning_layer/build/
 
-# Environment files
+# Secrets and local data
 .env
-# SQLite databases
 *.db
 *.sqlite
 *.sqlite3
+deploy/certs/
 
-# Desktop packaging
-credit_ai_frontend/src-tauri/binaries/
-credit_ai_frontend/src-tauri/gen/
-credit_ai_frontend/src-tauri/bundled.env
-reasoning_layer/build/
-reasoning_layer/dist/
-
-# OS generated files
+# Logs and OS files
+*.log
+error.log
 .DS_Store
 Thumbs.db

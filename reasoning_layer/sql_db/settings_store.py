@@ -22,9 +22,7 @@ SECRET_KEYS = {
 }
 
 ENV_DEFAULTS = {
-    "OPENAI_API_KEY": "ollama",
-    "OPENAI_BASE_URL": "http://127.0.0.1:11434/v1",
-    "OPENAI_MODEL_NAME": "qwen3:8b",
+    "OPENAI_MODEL_NAME": "gpt-5.4-nano",
 }
 
 _cache: dict[str, str] = {}
@@ -44,12 +42,12 @@ def _env_fallback(key: str) -> str:
 
 
 def get_setting(key: str, default: str | None = None) -> str:
+    env_val = _env_fallback(key)
+    if env_val:
+        return env_val
     cached = _cache.get(key)
     if cached:
         return cached
-    value = _env_fallback(key)
-    if value:
-        return value
     return default or ""
 
 
@@ -101,6 +99,8 @@ async def save_settings(updates: dict[str, str]) -> list[dict]:
             if value is None:
                 continue
             value = str(value).strip()
+            if len(value) > 8192:
+                continue
             if not value:
                 await db.execute("DELETE FROM app_settings WHERE key = ?", (key,))
                 _cache.pop(key, None)

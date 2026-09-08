@@ -1,6 +1,7 @@
 import { authFetch } from '@/api/client'
 import { setToken } from '@/lib/authStorage'
 import { apiUrl, withInternalHeaders } from '@/lib/runtime'
+import { friendlyAuthMessage } from '@/lib/authErrors'
 
 const AUTH_BASE = '/api/auth'
 
@@ -13,29 +14,31 @@ function applyAuthResponse(data) {
 
 async function parseErrorResponse(response) {
   const text = await response.text()
-  let message = text || response.statusText
+  let raw = text || response.statusText
   try {
     const json = JSON.parse(text)
-    message = json.detail ?? json.message ?? message
-    if (typeof message !== 'string') {
-      message = JSON.stringify(message)
-    }
+    raw = json.detail ?? json.message ?? raw
   } catch {
     // Use raw text.
   }
-  throw new Error(message)
+  throw new Error(friendlyAuthMessage(raw, response.status))
 }
 
 export async function register({ email, password, displayName }) {
-  const response = await fetch(apiUrl(`${AUTH_BASE}/register`), {
-    method: 'POST',
-    headers: withInternalHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({
-      email,
-      password,
-      display_name: displayName,
-    }),
-  })
+  let response
+  try {
+    response = await fetch(apiUrl(`${AUTH_BASE}/register`), {
+      method: 'POST',
+      headers: withInternalHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        email,
+        password,
+        display_name: displayName,
+      }),
+    })
+  } catch (err) {
+    throw new Error(friendlyAuthMessage(err))
+  }
 
   if (!response.ok) {
     await parseErrorResponse(response)
@@ -45,11 +48,16 @@ export async function register({ email, password, displayName }) {
 }
 
 export async function login({ email, password }) {
-  const response = await fetch(apiUrl(`${AUTH_BASE}/login`), {
-    method: 'POST',
-    headers: withInternalHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ email, password }),
-  })
+  let response
+  try {
+    response = await fetch(apiUrl(`${AUTH_BASE}/login`), {
+      method: 'POST',
+      headers: withInternalHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ email, password }),
+    })
+  } catch (err) {
+    throw new Error(friendlyAuthMessage(err))
+  }
 
   if (!response.ok) {
     await parseErrorResponse(response)

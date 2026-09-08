@@ -5,12 +5,14 @@ import { CompanySearch } from '@/components/CompanySearch'
 import { ChatHistory } from '@/components/ChatHistory'
 import { KuberLogo } from '@/components/KuberLogo'
 import { useAppStore } from '@/store/useAppStore'
+import { useAuthStore } from '@/store/useAuthStore'
 
 export function LeftSidebar() {
   const sidebarTab = useAppStore((s) => s.sidebarTab)
   const setSidebarTab = useAppStore((s) => s.setSidebarTab)
   const startNewChat = useAppStore((s) => s.startNewChat)
   const loadSession = useAppStore((s) => s.loadSession)
+  const isAdmin = useAuthStore((s) => Boolean(s.user?.is_admin))
 
   return (
     <aside className="glass-panel flex h-full w-[288px] shrink-0 flex-col border-r">
@@ -53,21 +55,23 @@ export function LeftSidebar() {
         </TabsContent>
       </Tabs>
 
-      <div className="border-t border-border/40 p-3">
-        <NavLink
-          to="/admin"
-          className={({ isActive }) =>
-            `flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium ${
-              isActive
-                ? 'bg-muted text-foreground'
-                : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
-            }`
-          }
-        >
-          <Shield className="h-3.5 w-3.5" />
-          Admin
-        </NavLink>
-      </div>
+      {isAdmin && (
+        <div className="border-t border-border/40 p-3">
+          <NavLink
+            to="/admin"
+            className={({ isActive }) =>
+              `flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium ${
+                isActive
+                  ? 'bg-muted text-foreground'
+                  : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+              }`
+            }
+          >
+            <Shield className="h-3.5 w-3.5" />
+            Admin
+          </NavLink>
+        </div>
+      )}
     </aside>
   )
 }

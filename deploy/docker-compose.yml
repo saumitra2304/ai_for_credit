@@ -1,0 +1,28 @@
+services:
+  kuber:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    env_file:
+      - ../.env
+    environment:
+      SQLITE_PATH: /data/credit_ai.db
+      SME_API_BASE: http://127.0.0.1:3000
+      SME_API_PORT: "3000"
+      OPENAI_MODEL_NAME: gpt-5.4-nano
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      CORS_ORIGIN_REGEX: ${CORS_ORIGIN_REGEX:-https://.*\\.vercel\\.app}
+      DOMAIN: ${DOMAIN:-_}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:-}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - kuber-data:/data
+      - ../.env:/app/.env:ro
+      - ./certs:/etc/letsencrypt:ro
+      - ./certbot-www:/var/www/certbot:ro
+    restart: unless-stopped
+
+volumes:
+  kuber-data:

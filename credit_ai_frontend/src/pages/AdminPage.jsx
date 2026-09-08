@@ -13,8 +13,8 @@ import * as adminApi from '@/api/admin'
 const SETTING_LABELS = {
   probe_api_key: 'Probe API key',
   INSTA_API_KEY: 'InstaFinancials API key',
-  OPENAI_API_KEY: 'OpenAI / Ollama API key',
-  OPENAI_BASE_URL: 'OpenAI base URL',
+  OPENAI_API_KEY: 'OpenAI API key',
+  OPENAI_BASE_URL: 'OpenAI base URL (leave blank for api.openai.com)',
   OPENAI_MODEL_NAME: 'Model name',
   SEARCH_API_KEY: 'Search API key',
 }
@@ -41,7 +41,7 @@ export function AdminPage() {
       <header className="glass-panel flex h-12 shrink-0 items-center justify-between border-b px-5">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="sm" asChild>
-            <Link to="/">
+            <Link to="/app">
               <ArrowLeft className="h-3.5 w-3.5" />
               Chat
             </Link>

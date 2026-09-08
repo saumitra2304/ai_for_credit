@@ -8,7 +8,6 @@ import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { ChatTurn } from '@/components/ChatMessage'
 import { CompanyCharts } from '@/components/CompanyCharts'
-import { LlmStartButton } from '@/components/LlmStartButton'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { ThinkingPanel } from '@/components/ThinkingPanel'
 import { KuberLogo } from '@/components/KuberLogo'
@@ -350,7 +349,6 @@ export function ChatInterface() {
               ? `${selectedCompanies.length} selected`
               : 'No company'}
           </Badge>
-          <LlmStartButton />
           <ThemeToggle />
           {selectedCompanies.length > 0 && (
             <Tooltip>

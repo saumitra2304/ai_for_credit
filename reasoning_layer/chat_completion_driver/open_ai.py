@@ -1,4 +1,5 @@
 import asyncio
+import os
 import re
 import sys
 import json
@@ -15,28 +16,31 @@ _llm_sig = None
 
 def _llm_client_and_model():
     global _llm_client, _llm_sig
-    base_url = get_setting("OPENAI_BASE_URL", "http://127.0.0.1:11434/v1")
-    api_key = get_setting("OPENAI_API_KEY", "ollama")
-    model = get_setting("OPENAI_MODEL_NAME", "qwen3:8b")
-    sig = (base_url, api_key)
+    api_key = get_setting("OPENAI_API_KEY")
+    if not api_key or api_key == "ollama":
+        api_key = os.getenv("OPENAI_API_KEY", "")
+    model = get_setting("OPENAI_MODEL_NAME", "gpt-5.4-nano") or "gpt-5.4-nano"
+    base_url = (get_setting("OPENAI_BASE_URL") or "").strip()
+    if "11434" in base_url or api_key == "ollama":
+        base_url = ""
+    sig = (base_url, api_key, model)
     if _llm_client is None or _llm_sig != sig:
-        _llm_client = AsyncOpenAI(base_url=base_url, api_key=api_key, timeout=1800.0)
+        kwargs = {"api_key": api_key or "missing", "timeout": 1800.0}
+        if base_url:
+            kwargs["base_url"] = base_url
+        _llm_client = AsyncOpenAI(**kwargs)
         _llm_sig = sig
     return _llm_client, model
 
-# Output caps. Without these a confused model generates until it hits the
-# context ceiling, which is what turned one extraction call into 16 minutes.
+# Output caps. GPT-5.4 nano has a large context window; one pass is enough.
 MAX_TOKENS_EXTRACT = 1200
-MAX_TOKENS_AGENT = 4000       # credit / news custom-instruction calls
-MAX_TOKENS_FINAL = 8000       # is_final financial analysis only
-MAX_TOKENS_PLAN = 400         # follow-up keyword planner JSON
+MAX_TOKENS_AGENT = 8000
+MAX_TOKENS_FINAL = 16000
+MAX_TOKENS_PLAN = 400
 
-# ~4 chars per token. 32k context minus room for the response.
-CHAR_BUDGET = 100_000
-
-# Each prior turn's response is a full analysis with tables. Left untrimmed,
-# two of them alone can eat half the context window.
-HISTORY_CHARS_PER_MSG = 1500
+# ~4 chars per token. 400k context leaves ample room for filings + web search.
+CHAR_BUDGET = 1_200_000
+HISTORY_CHARS_PER_MSG = 4000
 
 _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
 
@@ -110,12 +114,39 @@ FOLLOWUP_INSTRUCTION = (
     "that specific thing.\n"
     "Standalone filings are tables only. They do not contain news, corporate "
     "actions, board or management changes, or annual-report commentary.\n"
-    "When a Web search block is present, that is the primary source for those "
-    "topics. Summarise what the articles say and cite title, source, and date. "
-    "Do not invent headlines. Do not say the information is unavailable if "
-    "Web search has articles.\n"
-    "Only say searches found nothing if Web search is missing or lists no articles.\n"
-    "/no_think"
+    "Use web search for recent news or public facts. Summarise what you find "
+    "and cite title, source, and date. Do not invent headlines."
+)
+
+
+ANALYSIS_INSTRUCTION = (
+    "You are an expert financial analyst specialising in SME and corporate "
+    "credit risk assessment for Indian companies.\n\n"
+    "The user message contains filings, credit/legal/MSME extracts, and the "
+    "question. Use the web_search tool for recent news, litigation, ratings "
+    "actions, and market context.\n\n"
+    "Write ONE complete credit assessment with these sections:\n\n"
+    "1. FINANCIAL SUMMARY TABLES\n"
+    "   Markdown tables with years as columns. One table for P&L, one for "
+    "the balance sheet, one for key ratios. Reproduce values exactly as "
+    "supplied; do not recalculate or round. Include only line items present "
+    "in the data.\n\n"
+    "2. TREND ANALYSIS\n"
+    "   Revenue and profitability direction, liquidity (current/quick), "
+    "solvency (debt/equity, interest coverage), and working-capital "
+    "efficiency across the years given. Cite the specific numbers.\n\n"
+    "3. CREDIT, LEGAL AND MSME\n"
+    "   Ratings, distress markers, supplier delays, and material cases from "
+    "the filings.\n\n"
+    "4. NEWS AND MARKET CONTEXT\n"
+    "   From web search. Cite title, source, and date. Do not invent stories. "
+    "If search finds nothing material, say so once.\n\n"
+    "5. CREDIT STRENGTHS AND RED FLAGS\n"
+    "   Bullet points, each anchored to a figure or a cited article.\n\n"
+    "6. RISK CONCLUSION\n"
+    "   A short verdict with the two or three factors that drive it.\n\n"
+    "If several companies are in the packet, cover each, then a short "
+    "comparison. Analyse whatever is provided. Do not restate the raw input."
 )
 
 
@@ -313,8 +344,59 @@ CREDIT_INSTRUCTION = (
 )
 
 
+def _response_text_delta(event) -> str:
+    etype = getattr(event, "type", "") or ""
+    if etype in ("response.output_text.delta", "response.refusal.delta"):
+        return getattr(event, "delta", None) or ""
+    delta = getattr(event, "delta", None)
+    if isinstance(delta, str) and "output_text" in etype:
+        return delta
+    return ""
+
+
+async def _stream_responses(llm, model_name, instruction, user_content, max_tokens, web_search):
+    kwargs = {
+        "model": model_name,
+        "instructions": instruction,
+        "input": user_content,
+        "max_output_tokens": max_tokens,
+        "stream": True,
+    }
+    if web_search:
+        kwargs["tools"] = [{"type": "web_search"}]
+    stream = await llm.responses.create(**kwargs)
+    async for event in stream:
+        text = _response_text_delta(event)
+        if text:
+            yield text
+
+
+async def _stream_chat_completions(llm, model_name, messages, max_tokens):
+    try:
+        stream = await llm.chat.completions.create(
+            model=model_name,
+            messages=messages,
+            max_completion_tokens=max_tokens,
+            stream=True,
+        )
+    except TypeError:
+        stream = await llm.chat.completions.create(
+            model=model_name,
+            messages=messages,
+            max_tokens=max_tokens,
+            stream=True,
+        )
+    async for chunk in stream:
+        if not chunk.choices:
+            continue
+        delta = chunk.choices[0].delta
+        text = getattr(delta, "content", None)
+        if text:
+            yield text
+
+
 async def chat_endpoint_stream(query, company_information_list, chat_history, is_final=False,
-                               instruction=None):
+                               instruction=None, web_search=None):
     company_information = _join_information(company_information_list)
     history_str = _build_history(chat_history) if is_final else ""
 
@@ -322,25 +404,24 @@ async def chat_endpoint_stream(query, company_information_list, chat_history, is
         developer_instruction = instruction
         if history_str:
             developer_instruction += f"\n\nPrevious conversation:\n{history_str}"
-        max_tokens = MAX_TOKENS_AGENT
-        temperature = 0.3
+        max_tokens = MAX_TOKENS_AGENT if instruction != ANALYSIS_INSTRUCTION else MAX_TOKENS_FINAL
     elif is_final:
         developer_instruction = _final_instruction(history_str)
         max_tokens = MAX_TOKENS_FINAL
-        temperature = 0.4
     else:
         developer_instruction = EXTRACT_INSTRUCTION
         max_tokens = MAX_TOKENS_EXTRACT
-        temperature = 0.1
+
+    if web_search is None:
+        web_search = bool(is_final or instruction)
 
     user_content = f"{query}\n\nCompany Data:\n{company_information}"
 
     total_chars = len(developer_instruction) + len(user_content)
-    _log(f"[llm final={is_final} chars={total_chars} ~tokens={total_chars // 4} "
-         f"max_out={max_tokens}]")
+    _log(f"[llm final={is_final} web_search={web_search} chars={total_chars} "
+         f"~tokens={total_chars // 4} max_out={max_tokens}]")
     if total_chars > CHAR_BUDGET:
-        _log(f"[llm WARNING payload exceeds {CHAR_BUDGET} chars; a context "
-             f"shift is likely. Reduce the input rather than raising num_ctx.]")
+        _log(f"[llm WARNING payload exceeds {CHAR_BUDGET} chars]")
 
     messages = [
         {"role": "system", "content": developer_instruction},
@@ -349,25 +430,24 @@ async def chat_endpoint_stream(query, company_information_list, chat_history, is
 
     try:
         llm, model_name = _llm_client_and_model()
-        from request_ctx import agen_span, log_event
+        from request_ctx import agen_span
 
         kind = "llm.agent" if instruction else ("llm.final" if is_final else "llm.extract")
 
         async def _tokens():
-            stream = await llm.chat.completions.create(
-                model=model_name,
-                messages=messages,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                stream=True,
-            )
-            async for chunk in stream:
-                if not chunk.choices:
-                    continue
-                delta = chunk.choices[0].delta
-                text = getattr(delta, "content", None)
-                if text:
+            try:
+                async for text in _stream_responses(
+                    llm, model_name, developer_instruction, user_content,
+                    max_tokens, web_search,
+                ):
                     yield text
+                return
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                _log(f"[llm responses fallback to chat.completions: {type(exc).__name__}: {exc}]")
+            async for text in _stream_chat_completions(llm, model_name, messages, max_tokens):
+                yield text
 
         async for text in agen_span(kind, _tokens(), chars=total_chars, max_out=max_tokens):
             yield text
@@ -388,11 +468,11 @@ async def chat_endpoint_stream(query, company_information_list, chat_history, is
 
 
 async def chat_endpoint(query, company_information_list, chat_history, is_final=False,
-                        instruction=None):
+                        instruction=None, web_search=None):
     pieces = []
     async for text in chat_endpoint_stream(
         query, company_information_list, chat_history, is_final=is_final,
-        instruction=instruction,
+        instruction=instruction, web_search=web_search,
     ):
         pieces.append(text)
 

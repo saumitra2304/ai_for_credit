@@ -1,10 +1,6 @@
 export const THINKING_STAGES = [
   { id: 'fetch', label: 'Loading filings' },
-  { id: 'credit', label: 'Credit view' },
-  { id: 'news', label: 'News scan' },
-  { id: 'financials', label: 'Financial detail' },
-  { id: 'synthesis', label: 'Synthesis' },
-  { id: 'report', label: 'Report' },
+  { id: 'report', label: 'Credit assessment' },
 ]
 
 export function companyLabel(names) {
@@ -23,34 +19,11 @@ export function thoughtsForStage(stageId, names) {
       'Indexing GST, EPFO, directors, and compliance flags',
       'Waiting until the company packet is complete before writing',
     ],
-    credit: [
-      `Mapping ratings, CIRP, and distress markers for ${name}`,
-      'Checking defaulter lists, MSME delays, and legal history',
-      'Weighing rating migration against latest standalone debt',
-      'Testing interest coverage against current leverage',
-      'Drafting the per-company credit view from those signals',
-    ],
-    news: [
-      `Scanning general, financial, and legal news for ${name}`,
-      'Looking for earnings, litigation, and rating headlines',
-      'Separating confirmed reports from market noise',
-      'Keeping only items that change the credit view',
-    ],
-    financials: [
-      `Walking three-year P&L, balance sheet, and ratios for ${name}`,
-      'Tracing revenue, margins, leverage, and working-capital days',
-      'Anchoring strengths and red flags to specific figures',
-      'Writing the per-company financial detail from the statements',
-    ],
-    synthesis: [
-      'Combining credit, news, and financials into one view',
-      'Checking that the conclusion matches the numbers',
-      'Resolving contradictions between ratings and cash generation',
-      'Finalizing the credit assessment',
-    ],
     report: [
-      'Formatting tables and the risk conclusion',
-      'Finalizing the credit assessment report',
+      `Writing the credit assessment for ${name}`,
+      'Using filings plus live web search for news and legal context',
+      'Anchoring strengths and red flags to specific figures',
+      'Drafting tables, trends, and a risk conclusion in one pass',
     ],
   }
   return map[stageId] ?? map.fetch

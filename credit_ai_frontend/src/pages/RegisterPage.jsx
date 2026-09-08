@@ -16,22 +16,36 @@ export function RegisterPage() {
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [formError, setFormError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
   const handleSubmit = async (event) => {
     event.preventDefault()
     clearError()
-    setSubmitting(true)
+    setFormError('')
 
+    if (password.length < 8) {
+      setFormError('Password must be at least 8 characters.')
+      return
+    }
+    if (password !== confirmPassword) {
+      setFormError('The two passwords do not match. Type the same password in both fields.')
+      return
+    }
+
+    setSubmitting(true)
     try {
       await register(email.trim(), password, displayName.trim())
-      navigate('/', { replace: true })
+      navigate('/app', { replace: true })
     } catch {
       // Error stored in auth store.
     } finally {
       setSubmitting(false)
     }
   }
+
+  const shownError = formError || error
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4">
@@ -41,7 +55,9 @@ export function RegisterPage() {
       </div>
       <div className="glass-panel relative w-full max-w-md rounded-2xl border p-8 shadow-xl">
         <div className="mb-8 flex flex-col items-center text-center">
-          <KuberLogo size={44} showWordmark />
+          <Link to="/" aria-label="Back to home">
+            <KuberLogo size={44} showWordmark />
+          </Link>
           <p className="mt-2 text-sm text-muted-foreground">Create your Kuber account</p>
         </div>
 
@@ -88,13 +104,31 @@ export function RegisterPage() {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="At least 8 characters"
               minLength={8}
+              maxLength={128}
               required
             />
           </div>
 
-          {error && (
+          <div className="space-y-1.5">
+            <label htmlFor="confirmPassword" className="text-xs font-medium text-muted-foreground">
+              Confirm password
+            </label>
+            <Input
+              id="confirmPassword"
+              type="password"
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Type the same password again"
+              minLength={8}
+              maxLength={128}
+              required
+            />
+          </div>
+
+          {shownError && (
             <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-              {error}
+              {shownError}
             </p>
           )}
 

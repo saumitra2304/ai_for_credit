@@ -24,7 +24,7 @@ export function LoginPage() {
 
     try {
       await login(email.trim(), password)
-      navigate('/', { replace: true })
+      navigate('/app', { replace: true })
     } catch {
       // Error stored in auth store.
     } finally {
@@ -40,7 +40,9 @@ export function LoginPage() {
       </div>
       <div className="glass-panel relative w-full max-w-md rounded-2xl border p-8 shadow-xl">
         <div className="mb-8 flex flex-col items-center text-center">
-          <KuberLogo size={44} showWordmark />
+          <Link to="/" aria-label="Back to home">
+            <KuberLogo size={44} showWordmark />
+          </Link>
           <p className="mt-2 text-sm text-muted-foreground">Sign in to your workspace</p>
         </div>
 
@@ -71,6 +73,7 @@ export function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
+              maxLength={128}
               required
             />
           </div>

@@ -1,0 +1,16 @@
+.git
+.gitignore
+**/.env
+**/__pycache__
+**/*.pyc
+**/*.db
+**/*.sqlite
+target
+dist
+credit_ai_frontend/node_modules
+credit_ai_frontend/dist
+reasoning_layer/build
+reasoning_layer/dist
+deploy/certs
+*.exe
+

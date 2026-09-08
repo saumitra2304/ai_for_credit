@@ -1,27 +1,28 @@
 import aiohttp
-import hmac
 import os
 import sys
 import time
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 import asyncio
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
+from pathlib import Path
+
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+load_dotenv()
 from auth_routes import get_current_user_id, router as auth_router
 from chat_completion_driver.open_ai import (
-    chat_endpoint_stream, CREDIT_INSTRUCTION, NEWS_INSTRUCTION, FOLLOWUP_INSTRUCTION,
-    FOLLOWUP_WEB_NOTE, plan_followup_web_search,
+    chat_endpoint_stream, FOLLOWUP_INSTRUCTION, ANALYSIS_INSTRUCTION,
 )
-from sme_api.insta_summary_f import insta_summary
-from pydantic import BaseModel, Field, field_validator
 from sql_db.chat_store import get_chat, create_chat, update_chat, list_chat_summaries
+from pydantic import BaseModel, Field, field_validator
 from state_models import chat_memory
 from sme_api.probe24_comp_details import company_details
 from financial_flatten import flatten_company
 from credit_flatten import flatten_credit
-from news_flatten import fetch_company_news, flatten_news, fetch_topic_news, flatten_topic_news
 from sql_db import auth_store
 from sql_db.db import close_db, init_db_sync
 from sql_db import ops_store, settings_store
@@ -35,6 +36,7 @@ async def lifespan(app: FastAPI):
     init_db_sync()
     await ops_store.start_writer()
     await settings_store.load_cache()
+    auth_store.warm_password_hasher()
     bootstrap_email = os.getenv("AUTH_BOOTSTRAP_EMAIL")
     bootstrap_password = os.getenv("AUTH_BOOTSTRAP_PASSWORD")
     if bootstrap_email and bootstrap_password:
@@ -44,7 +46,6 @@ async def lifespan(app: FastAPI):
             os.getenv("AUTH_BOOTSTRAP_NAME", "Admin"),
         )
     app.state.semaphore_sme_financials = asyncio.Semaphore(10)
-    app.state.semaphore_news = asyncio.Semaphore(5)
     app.state.client = aiohttp.ClientSession(
         timeout=aiohttp.ClientTimeout(total=120, connect=15, sock_read=90)
     )
@@ -53,43 +54,58 @@ async def lifespan(app: FastAPI):
     await ops_store.stop_writer()
     await close_db()
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    lifespan=lifespan,
+    docs_url="/docs" if os.getenv("ENABLE_API_DOCS", "").lower() in ("1", "true", "yes") else None,
+    redoc_url="/redoc" if os.getenv("ENABLE_API_DOCS", "").lower() in ("1", "true", "yes") else None,
+    openapi_url="/openapi.json" if os.getenv("ENABLE_API_DOCS", "").lower() in ("1", "true", "yes") else None,
+)
 
 _cors_origins = [
     origin.strip()
     for origin in os.getenv(
         "CORS_ORIGINS",
-        "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,"
-        "http://tauri.localhost,https://tauri.localhost,tauri://localhost",
+        "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173",
     ).split(",")
     if origin.strip()
 ]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
+    allow_origin_regex=os.getenv(
+        "CORS_ORIGIN_REGEX",
+        r"https://.*\.vercel\.app",
+    ),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-Id"],
 )
 app.include_router(auth_router)
 app.include_router(admin_router)
 
 
-def _internal_token_ok(got: str, expected: str) -> bool:
-    if len(got) != len(expected):
-        hmac.compare_digest(expected.encode("utf-8"), expected.encode("utf-8"))
-        return False
-    return hmac.compare_digest(got.encode("utf-8"), expected.encode("utf-8"))
+def _friendly_validation_message(exc) -> str:
+    for err in exc.errors():
+        loc = [str(part) for part in err.get("loc", []) if part != "body"]
+        field = loc[-1] if loc else "field"
+        kind = err.get("type") or ""
+        if field == "password" and ("too_short" in kind or "at least" in (err.get("msg") or "").lower()):
+            return "Password must be at least 8 characters."
+        if field == "email":
+            return "Enter a valid email address."
+        if kind == "missing":
+            return f"Please fill in {field.replace('_', ' ')}."
+        msg = err.get("msg") or ""
+        if msg.lower().startswith("value error,"):
+            return msg.split(",", 1)[-1].strip()
+        if msg:
+            return msg
+    return "Please check the form and try again."
 
 
-@app.middleware("http")
-async def require_internal_token(request: Request, call_next):
-    expected = os.getenv("INTERNAL_TOKEN", "")
-    if expected and request.method != "OPTIONS":
-        got = request.headers.get("x-internal-token", "")
-        if not _internal_token_ok(got, expected):
-            return JSONResponse({"detail": "Unauthorized"}, status_code=401)
-    return await call_next(request)
+@app.exception_handler(RequestValidationError)
+async def validation_handler(_request: Request, exc: RequestValidationError):
+    return JSONResponse({"detail": _friendly_validation_message(exc)}, status_code=422)
 
 
 _NOISY_PATHS = ("/admin/logs", "/admin/traces", "/admin/metrics", "/health")
@@ -104,6 +120,10 @@ async def tracing_middleware(request: Request, call_next):
         response = await call_next(request)
         status = response.status_code
         response.headers["x-request-id"] = rid
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Cache-Control"] = "no-store"
         return response
     except Exception as exc:
         await log_event("error", "http", f"{request.method} {request.url.path} crashed: {exc}")
@@ -231,22 +251,10 @@ def _ensure_cache(chat_history):
         chat_history.company_cache = {}
 
 
-def _company_llm_needed(cache: dict, cin: str) -> bool:
-    slot = cache.get(cin, {})
-    return not (slot.get("credit") and slot.get("news") and "detail" in slot)
-
-
-def _join_company_blocks(cin_list, cache, key):
-    blocks = [cache[cin][key] for cin in cin_list if cache.get(cin, {}).get(key)]
-    return "\n\n---\n\n".join(blocks)
-
-
-def _all_companies_cached(cache: dict, cin_list: list[str]) -> bool:
-    return bool(cin_list) and all(not _company_llm_needed(cache, cin) for cin in cin_list)
-
-
 def _is_followup(chat_history, cache: dict, cin_list: list[str]) -> bool:
-    return bool(chat_history.message_trail) and _all_companies_cached(cache, cin_list)
+    if not chat_history.message_trail or not cin_list:
+        return False
+    return all((cache.get(cin) or {}).get("flat") for cin in cin_list)
 
 
 def _followup_context(cin_list, cache):
@@ -281,21 +289,6 @@ def _slim_followup_history(chat_history):
     )
 
 
-async def _followup_web_search(query: str, cache: dict, cin_list: list[str], client) -> str:
-    names = [
-        cache[cin].get("label")
-        for cin in cin_list
-        if cache.get(cin, {}).get("label")
-    ]
-    queries = await plan_followup_web_search(query, names)
-    if not queries:
-        print("[followup] planner empty; no extra web search", file=sys.stderr, flush=True)
-        return ""
-    print(f"[followup] web search {queries}", file=sys.stderr, flush=True)
-    pairs = await fetch_topic_news(client, queries, app.state.semaphore_news)
-    return flatten_topic_news(pairs)
-
-
 def _answer_header(cin_list, cache, results) -> str:
     if len(cin_list) == 1 and results:
         cin = cin_list[0]
@@ -326,15 +319,11 @@ async def _chat_stream(request: ChatRequest, user_id: int):
 
     # Follow-up: all companies cached + prior messages — answer only the new question.
     if _is_followup(chat_history, cache, request.cin_list):
-        print("[followup] skipping credit/news/detail; direct answer only",
-              file=sys.stderr, flush=True)
-        await log_event("info", "agent", "Follow-up: skip credit/news/detail rebuild")
-        sections = []
+        print("[followup] one-pass answer", file=sys.stderr, flush=True)
+        await log_event("info", "agent", "Follow-up: one GPT call with web search")
         for entry in results:
             cin = _cin(entry)
             slot = cache.get(cin, {})
-            if slot.get("detail"):
-                sections.append(slot["detail"])
             flat = flatten_company(entry)
             if flat.strip():
                 slot["flat"] = flat
@@ -342,21 +331,10 @@ async def _chat_stream(request: ChatRequest, user_id: int):
         header = _answer_header(request.cin_list, cache, results)
         context = _followup_context(request.cin_list, cache)
         instruction = FOLLOWUP_INSTRUCTION
-        try:
-            async with span("followup.web_search"):
-                web_block = await _followup_web_search(
-                    request.query, cache, request.cin_list, client
-                )
-        except Exception as exc:
-            print(f"[followup] web search failed: {exc}", file=sys.stderr, flush=True)
-            await log_event("error", "agent", f"Follow-up web search failed: {exc}")
-            web_block = ""
-        if web_block:
-            context = f"### Web search\n{web_block}\n\n{context}"
-            instruction = FOLLOWUP_INSTRUCTION + FOLLOWUP_WEB_NOTE
         followup_query = (
             f"Answer only this follow-up:\n{request.query}\n\n"
             "Use the reference data below only where this question needs it. "
+            "Use web search when the question needs recent news or public facts. "
             "Do not retell the first credit analysis."
         )
         body = ""
@@ -367,6 +345,7 @@ async def _chat_stream(request: ChatRequest, user_id: int):
                 followup_query, [context], _slim_followup_history(chat_history),
                 is_final=True,
                 instruction=instruction,
+                web_search=True,
             ),
         ):
             if not started:
@@ -384,209 +363,46 @@ async def _chat_stream(request: ChatRequest, user_id: int):
         print("", file=sys.stderr, flush=True)
         return
 
-    sections = []
-    flats = []
-
-    yield _emit("\n# Per-Company Credit Answer\n\n")
-    await log_event("info", "agent", "Generating per-company credit answer")
-    credit_answer = ""
-    async for chunk in agen_span(
-        "credit",
-        credit_tool_stream(
-            request, user_id, results=results, chat_history=chat_history, company_cache=cache
-        ),
-    ):
-        credit_answer += chunk
-        yield _emit(chunk)
-
-    yield _emit("\n\n---\n\n# Per-Company News\n\n")
-    await log_event("info", "agent", "Gathering per-company news")
-    news_answer = ""
-    async for chunk in agen_span(
-        "news",
-        news_tool_stream(
-            request, user_id, results=results, chat_history=chat_history,
-            client=client, company_cache=cache,
-        ),
-    ):
-        news_answer += chunk
-        yield _emit(chunk)
-
-    detail_started = False
+    packets = []
     for entry in results:
         label = _company_label(entry)
         cin = _cin(entry)
         slot = cache.setdefault(cin, {"label": label})
         flat = flatten_company(entry)
-
-        if not flat.strip():
-            print(
-                f"[skip] no STANDALONE 2023-2025 financials for {label}",
-                file=sys.stderr, flush=True,
-            )
-            block = f"## {label}\n\nNo 2023-2025 standalone financials on record."
-            if _company_llm_needed(cache, cin):
-                slot["detail"] = block
-                slot["flat"] = ""
-            if not detail_started:
-                yield _emit("\n\n---\n\n# Per-Company Detail\n\n")
-                detail_started = True
-            yield _emit(slot["detail"])
-            sections.append(slot["detail"])
-            continue
-
+        credit_flat = flatten_credit(entry)
         slot["flat"] = flat
-        if not detail_started:
-            yield _emit("\n\n---\n\n# Per-Company Detail\n\n")
-            detail_started = True
+        packets.append(
+            f"### {label}\n\n#### Filings\n{flat or '(no standalone tables)'}\n\n"
+            f"#### Credit / legal / MSME\n{credit_flat or '(none)'}"
+        )
 
-        if slot.get("detail") and not _company_llm_needed(cache, cin):
-            print(f"[cache hit] detail for {label}", file=sys.stderr, flush=True)
-            yield _emit(slot["detail"])
-            sections.append(slot["detail"])
-            flats.append((label, flat))
-            continue
-
-        header = f"## {label}\n\n"
-        yield _emit(header)
-        section = header
-        per_company_query = f"{request.query}\n\n(This call covers only: {label}.)"
-        answer = ""
-        await log_event("info", "agent", f"Writing financial detail for {label}")
-        async for chunk in agen_span(
-            "financial_detail",
-            chat_endpoint_stream(per_company_query, [flat], chat_history, is_final=True),
-            company=label,
-        ):
-            answer += chunk
-            section += chunk
-            yield _emit(chunk)
-        slot["detail"] = section
-        sections.append(section)
-        flats.append((label, flat))
-
-    if not sections:
+    if not packets:
         raise ValueError(f"No usable data for {request.cin_list}")
 
-    answer_header = _answer_header(request.cin_list, cache, results)
-    run_synthesis = len(flats) > 1 or bool(chat_history.message_trail)
-    if run_synthesis and flats:
-        combined_tables = "\n\n".join(
-            f"### {label}\n{table}" for label, table in flats
-        )
-        synthesis_query = request.query
-        if len(flats) > 1:
-            synthesis_query += (
-                f"\n\nYou have already produced a detailed breakdown for each company "
-                f"individually (shown after this answer). Answer the question above "
-                f"directly, comparing across all {len(flats)} companies using the "
-                f"tables below. Be direct and specific -- name the company where "
-                f"relevant rather than describing them abstractly."
-            )
-        body = ""
-        started = False
-        await log_event("info", "agent", "Synthesizing final answer")
-        async for chunk in agen_span(
-            "synthesis",
-            chat_endpoint_stream(
-                synthesis_query, [combined_tables], chat_history, is_final=True
-            ),
-        ):
-            if not started:
-                yield _emit("\n\n---\n\n" + answer_header)
-                started = True
-            body += chunk
-            yield _emit(chunk)
-        final_answer = body
-    elif flats:
-        slot0 = cache.get(_cin(results[0]), {})
-        detail = slot0.get("detail", sections[0])
-        final_answer = detail.split("\n\n", 1)[-1] if detail.startswith("## ") else detail
-        yield _emit(final_answer)
-    else:
-        final_answer = sections[0]
-        yield _emit(final_answer)
-
-    credit_answer = _join_company_blocks(request.cin_list, cache, "credit") or credit_answer
-    news_answer = _join_company_blocks(request.cin_list, cache, "news") or news_answer
-
-    chat_response = (
-        answer_header + final_answer
-        + "\n\n---\n\n# Per-Company Credit Answer\n\n"
-        + credit_answer
-        + "\n\n---\n\n# Per-Company News\n\n"
-        + news_answer
-        + "\n\n---\n\n# Per-Company Detail\n\n"
-        + "\n\n---\n\n".join(sections)
-    )
-
-    chat_history.message_trail.append(
-        {"query": request.query, "response": chat_response}
-    )
-    if len(chat_history.message_trail) > 2:
-        chat_history.message_trail = chat_history.message_trail[-2:]
-    await update_chat(chat_history)
-    print("", file=sys.stderr, flush=True)
-
-
-async def _news_stream(request: ChatRequest, user_id: int):
-    semaphore = app.state.semaphore_sme_financials
-    client = app.state.client
-
-    chat_history = await get_chat(user_id, request.chat_id)
-    if chat_history == 0:
-        chat_history = await create_chat(
-            user_id, request.chat_id, request.cin_list, request.query
-        )
-    if not isinstance(chat_history.sme_data, dict):
-        chat_history.sme_data = {}
-
-    yield _emit("Loading company data...\n")
-    results = await _load_results(request, chat_history, client, semaphore)
-
-    chat_response = ""
-    async for chunk in news_tool_stream(
-        request, user_id, results=results, chat_history=chat_history, client=client
+    header = _answer_header(request.cin_list, cache, results)
+    context = "\n\n".join(packets)
+    await log_event("info", "agent", "Writing one-pass credit assessment with web search")
+    body = ""
+    started = False
+    async for chunk in agen_span(
+        "analysis",
+        chat_endpoint_stream(
+            request.query,
+            [context],
+            chat_history,
+            is_final=True,
+            instruction=ANALYSIS_INSTRUCTION,
+            web_search=True,
+        ),
     ):
-        chat_response += chunk
+        if not started:
+            yield _emit(header)
+            started = True
+        body += chunk
         yield _emit(chunk)
 
-    if not chat_response.strip():
-        raise ValueError(f"No usable data for {request.cin_list}")
-
-    chat_history.message_trail.append(
-        {"query": request.query, "response": chat_response}
-    )
-    if len(chat_history.message_trail) > 2:
-        chat_history.message_trail = chat_history.message_trail[-2:]
-    await update_chat(chat_history)
-    print("", file=sys.stderr, flush=True)
-
-
-async def _credit_stream(request: ChatRequest, user_id: int):
-    semaphore = app.state.semaphore_sme_financials
-    client = app.state.client
-
-    chat_history = await get_chat(user_id, request.chat_id)
-    if chat_history == 0:
-        chat_history = await create_chat(
-            user_id, request.chat_id, request.cin_list, request.query
-        )
-    if not isinstance(chat_history.sme_data, dict):
-        chat_history.sme_data = {}
-
-    yield _emit("Loading company data...\n")
-    results = await _load_results(request, chat_history, client, semaphore)
-
-    chat_response = ""
-    async for chunk in credit_tool_stream(
-        request, user_id, results=results, chat_history=chat_history
-    ):
-        chat_response += chunk
-        yield _emit(chunk)
-
-    if not chat_response.strip():
-        raise ValueError(f"No usable data for {request.cin_list}")
+    report = header + body
+    chat_response = report
 
     chat_history.message_trail.append(
         {"query": request.query, "response": chat_response}
@@ -634,210 +450,12 @@ async def chat(
         raise e
 
 
-@app.post("/news")
-async def news(
-    request: ChatRequest,
-    user_id: int = Depends(get_current_user_id),
-):
-    async def stream():
-        try:
-            async for chunk in _traced_stream("news", request, _news_stream(request, user_id)):
-                yield chunk
-        except Exception as e:
-            import traceback
-            with open("error.log", "a", encoding="utf-8") as f:
-                traceback.print_exc(file=f)
-            raise e
-
-    if request.stream:
-        return StreamingResponse(
-            stream(), media_type="text/plain; charset=utf-8", headers=STREAM_HEADERS
-        )
-    try:
-        return await _collect(_news_stream(request, user_id))
-    except Exception as e:
-        import traceback
-        with open("error.log", "a", encoding="utf-8") as f:
-            traceback.print_exc(file=f)
-        raise e
-
-
-@app.post("/credit")
-async def credit(
-    request: ChatRequest,
-    user_id: int = Depends(get_current_user_id),
-):
-    async def stream():
-        try:
-            async for chunk in _traced_stream("credit", request, _credit_stream(request, user_id)):
-                yield chunk
-        except Exception as e:
-            import traceback
-            with open("error.log", "a", encoding="utf-8") as f:
-                traceback.print_exc(file=f)
-            raise e
-
-    if request.stream:
-        return StreamingResponse(
-            stream(), media_type="text/plain; charset=utf-8", headers=STREAM_HEADERS
-        )
-    try:
-        return await _collect(_credit_stream(request, user_id))
-    except Exception as e:
-        import traceback
-        with open("error.log", "a", encoding="utf-8") as f:
-            traceback.print_exc(file=f)
-        raise e
-
-async def news_tool_stream(
-    request, user_id, results=None, chat_history=None, client=None, company_cache=None,
-):
-    if chat_history is None:
-        chat_history = await get_chat(user_id, request.chat_id)
-        if chat_history == 0:
-            chat_history = await create_chat(
-                user_id, request.chat_id, request.cin_list, request.query
-            )
-        if not isinstance(chat_history.sme_data, dict):
-            chat_history.sme_data = {}
-    _ensure_cache(chat_history)
-    if company_cache is None:
-        company_cache = chat_history.company_cache
-
-    if results is None:
-        semaphore = app.state.semaphore_sme_financials
-        if client is None:
-            client = app.state.client
-        results = await _load_results(request, chat_history, client, semaphore)
-
-    if not results:
-        raise ValueError(f"No usable data for {request.cin_list}")
-
-    if client is None:
-        client = app.state.client
-    news_sem = app.state.semaphore_news
-
-    for i, entry in enumerate(results):
-        cin = _cin(entry)
-        label = _company_label(entry)
-        slot = company_cache.setdefault(cin, {"label": label})
-
-        if i:
-            yield "\n\n---\n\n"
-
-        if slot.get("news") and not _company_llm_needed(company_cache, cin):
-            print(f"[cache hit] news for {label}", file=sys.stderr, flush=True)
-            yield slot["news"]
-            continue
-
-        company = (entry.get("data", {}) or {}).get("company", {}) or {}
-        name = company.get("legal_name") or label
-
-        categories = await fetch_company_news(client, name, news_sem)
-        flat = flatten_news(label, categories)
-        query = f"{request.query}\n\n(This call covers only: {label}.)"
-        header = f"## {label}\n\n"
-        yield header
-        block = header
-        async for chunk in chat_endpoint_stream(
-            query, [flat], chat_history, is_final=True,
-            instruction=NEWS_INSTRUCTION,
-        ):
-            block += chunk
-            yield chunk
-        slot["news"] = block
-
-
-async def credit_tool_stream(
-    request, user_id, results=None, chat_history=None, company_cache=None,
-):
-    if chat_history is None:
-        chat_history = await get_chat(user_id, request.chat_id)
-        if chat_history == 0:
-            chat_history = await create_chat(
-                user_id, request.chat_id, request.cin_list, request.query
-            )
-        if not isinstance(chat_history.sme_data, dict):
-            chat_history.sme_data = {}
-    _ensure_cache(chat_history)
-    if company_cache is None:
-        company_cache = chat_history.company_cache
-
-    if results is None:
-        semaphore = app.state.semaphore_sme_financials
-        client = app.state.client
-        results = await _load_results(request, chat_history, client, semaphore)
-
-    if not results:
-        raise ValueError(f"No usable data for {request.cin_list}")
-
-    for i, entry in enumerate(results):
-        cin = _cin(entry)
-        label = _company_label(entry)
-        slot = company_cache.setdefault(cin, {"label": label})
-
-        if i:
-            yield "\n\n---\n\n"
-
-        if slot.get("credit") and not _company_llm_needed(company_cache, cin):
-            print(f"[cache hit] credit for {label}", file=sys.stderr, flush=True)
-            yield slot["credit"]
-            continue
-
-        flat = flatten_credit(entry)
-        query = f"{request.query}\n\n(This call covers only: {label}.)"
-        header = f"## {label}\n\n"
-        yield header
-        block = header
-        async for chunk in chat_endpoint_stream(
-            query, [flat], chat_history, is_final=True,
-            instruction=CREDIT_INSTRUCTION,
-        ):
-            block += chunk
-            yield chunk
-        slot["credit"] = block
-
-
-async def credit_tool(
-    request: ChatRequest, user_id: int, results=None, chat_history=None, persist=True,
-):
-    try:
-        if chat_history is None:
-            chat_history = await get_chat(user_id, request.chat_id)
-            if chat_history == 0:
-                chat_history = await create_chat(
-                    user_id, request.chat_id, request.cin_list, request.query
-                )
-            if not isinstance(chat_history.sme_data, dict):
-                chat_history.sme_data = {}
-
-        pieces = []
-        async for chunk in credit_tool_stream(
-            request, user_id, results=results, chat_history=chat_history
-        ):
-            pieces.append(chunk)
-        chat_response = "".join(pieces)
-
-        if persist:
-            chat_history.message_trail.append(
-                {"query": request.query, "response": chat_response}
-            )
-            if len(chat_history.message_trail) > 2:
-                chat_history.message_trail = chat_history.message_trail[-2:]
-            await update_chat(chat_history)
-        return chat_response
-    except Exception as e:
-        import traceback
-        with open("error.log", "a", encoding="utf-8") as f:
-            traceback.print_exc(file=f)
-        raise e
-
 def _public_company_cache(cache: dict | None) -> dict:
     return {
         cin: {
             key: val
             for key, val in (slot or {}).items()
-            if key in ("label", "credit", "news", "detail")
+            if key in ("label", "flat")
         }
         for cin, slot in (cache or {}).items()
     }

@@ -1,8 +1,9 @@
 import os
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from auth_rate_limit import enforce as enforce_auth_rate
 from sql_db import auth_store
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -48,11 +49,18 @@ async def get_current_user_id(user: dict = Depends(get_current_user)) -> int:
     return user["id"]
 
 
+async def require_admin(user: dict = Depends(get_current_user)) -> dict:
+    if not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    return user
+
+
 @router.post("/register", response_model=AuthResponse)
-async def register(body: RegisterRequest):
+async def register(body: RegisterRequest, request: Request):
     allow_register = os.getenv("AUTH_ALLOW_REGISTER", "true").lower() in ("1", "true", "yes")
     if not allow_register:
         raise HTTPException(status_code=403, detail="Registration is disabled.")
+    enforce_auth_rate(request, "register", body.email)
     try:
         return await auth_store.register_user(
             body.email, body.password, body.display_name
@@ -62,7 +70,8 @@ async def register(body: RegisterRequest):
 
 
 @router.post("/login", response_model=AuthResponse)
-async def login(body: LoginRequest):
+async def login(body: LoginRequest, request: Request):
+    enforce_auth_rate(request, "login", body.email)
     try:
         return await auth_store.login_user(body.email, body.password)
     except auth_store.AuthError as exc:

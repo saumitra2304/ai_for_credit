@@ -119,28 +119,15 @@ async function readPlainResponse(response) {
 }
 
 export const ANALYSIS_STAGES = [
-  { id: 'fetch', label: 'Loading company data', weight: 12 },
-  { id: 'credit', label: 'Generating per-company credit answer', weight: 22 },
-  { id: 'news', label: 'Gathering per-company news', weight: 16 },
-  { id: 'financials', label: 'Analyzing per-company financial detail', weight: 24 },
-  { id: 'synthesis', label: 'Synthesizing final answer', weight: 16 },
-  { id: 'report', label: 'Finalizing credit assessment report', weight: 10 },
+  { id: 'fetch', label: 'Loading company data', weight: 20 },
+  { id: 'report', label: 'Writing credit assessment', weight: 80 },
 ]
 
 export function detectStreamStage(text) {
   const content = stripStreamPrefix(text)
 
-  if (content.includes('# Answer')) {
-    return ANALYSIS_STAGES.find((stage) => stage.id === 'synthesis')
-  }
-  if (content.includes('# Per-Company Detail')) {
-    return ANALYSIS_STAGES.find((stage) => stage.id === 'financials')
-  }
-  if (content.includes('# Per-Company News')) {
-    return ANALYSIS_STAGES.find((stage) => stage.id === 'news')
-  }
-  if (content.includes('# Per-Company Credit Answer')) {
-    return ANALYSIS_STAGES.find((stage) => stage.id === 'credit')
+  if (content.trim().length > 0) {
+    return ANALYSIS_STAGES.find((stage) => stage.id === 'report')
   }
   if (text.includes(LOADING_PREFIX)) {
     return ANALYSIS_STAGES.find((stage) => stage.id === 'fetch')

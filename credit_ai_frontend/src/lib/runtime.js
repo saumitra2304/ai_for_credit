@@ -1,15 +1,13 @@
 export function getRuntimeConfig() {
   if (typeof window === 'undefined') {
-    return { apiOrigin: '', token: '', desktop: false }
+    return { apiOrigin: '', token: '' }
   }
 
-  return (
-    window.__CREDIT_AI__ ?? {
-      apiOrigin: '',
-      token: '',
-      desktop: false,
-    }
-  )
+  const viteOrigin = String(import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+  return {
+    apiOrigin: viteOrigin,
+    token: '',
+  }
 }
 
 export function apiUrl(path) {
@@ -21,10 +19,5 @@ export function apiUrl(path) {
 }
 
 export function withInternalHeaders(initHeaders) {
-  const headers = new Headers(initHeaders ?? {})
-  const { token } = getRuntimeConfig()
-  if (token) {
-    headers.set('X-Internal-Token', token)
-  }
-  return headers
+  return new Headers(initHeaders ?? {})
 }

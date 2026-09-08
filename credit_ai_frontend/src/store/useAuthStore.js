@@ -1,34 +1,49 @@
 import { create } from 'zustand'
 import * as authApi from '@/api/auth'
 import { clearToken, getToken } from '@/lib/authStorage'
+import { friendlyAuthMessage } from '@/lib/authErrors'
+
+function initialStatus() {
+  try {
+    return getToken() ? 'idle' : 'unauthenticated'
+  } catch {
+    return 'unauthenticated'
+  }
+}
 
 export const useAuthStore = create((set) => ({
   user: null,
-  status: 'idle',
+  status: initialStatus(),
   error: null,
 
   clearError: () => set({ error: null }),
 
   login: async (email, password) => {
-    set({ status: 'loading', error: null })
+    set({ error: null })
     try {
       const data = await authApi.login({ email, password })
       set({ user: data.user, status: 'authenticated', error: null })
       return data
     } catch (err) {
-      set({ status: 'unauthenticated', error: err.message })
+      set({
+        status: 'unauthenticated',
+        error: friendlyAuthMessage(err, err.status),
+      })
       throw err
     }
   },
 
   register: async (email, password, displayName) => {
-    set({ status: 'loading', error: null })
+    set({ error: null })
     try {
       const data = await authApi.register({ email, password, displayName })
       set({ user: data.user, status: 'authenticated', error: null })
       return data
     } catch (err) {
-      set({ status: 'unauthenticated', error: err.message })
+      set({
+        status: 'unauthenticated',
+        error: friendlyAuthMessage(err, err.status),
+      })
       throw err
     }
   },

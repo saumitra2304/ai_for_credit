@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "credit_ai_frontend/src-tauri"]
+members = ["."]
 resolver = "2"
 
 [package]

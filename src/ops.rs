@@ -48,6 +48,15 @@ pub fn sqlite_path() -> PathBuf {
     }
 }
 
+fn open_sqlite(path: &Path) -> rusqlite::Result<Connection> {
+    let conn = Connection::open(path)?;
+    let _ = conn.busy_timeout(Duration::from_millis(8000));
+    let _ = conn.execute_batch(
+        "PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON;",
+    );
+    Ok(conn)
+}
+
 pub fn overlay_keys(path: &Path, probe: &mut String, insta: &mut String) {
     let mtime = file_mtime_secs(path);
     if let Ok(guard) = KEY_OVERLAY.lock() {
@@ -64,10 +73,9 @@ pub fn overlay_keys(path: &Path, probe: &mut String, insta: &mut String) {
         }
     }
 
-    let Ok(conn) = Connection::open(path) else {
+    let Ok(conn) = open_sqlite(path) else {
         return;
     };
-    let _ = conn.busy_timeout(Duration::from_millis(3000));
     let mut overlay = KeyOverlay {
         mtime_secs: mtime,
         probe: String::new(),
@@ -191,10 +199,9 @@ fn record_span(
     status: &str,
     attrs_json: Option<&str>,
 ) {
-    let Ok(conn) = Connection::open(path) else {
+    let Ok(conn) = open_sqlite(path) else {
         return;
     };
-    let _ = conn.busy_timeout(Duration::from_millis(3000));
     let _ = conn.execute(
         "INSERT INTO app_spans (trace_id, span_id, parent_id, name, start_ts, end_ts, status, attrs_json)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
@@ -213,10 +220,9 @@ fn record_span(
 }
 
 fn record_log(path: &Path, level: &str, message: &str, request_id: Option<&str>) {
-    let Ok(conn) = Connection::open(path) else {
+    let Ok(conn) = open_sqlite(path) else {
         return;
     };
-    let _ = conn.busy_timeout(Duration::from_millis(3000));
     let clipped = if message.len() > 2000 {
         format!("{}…", &message[..2000])
     } else {
