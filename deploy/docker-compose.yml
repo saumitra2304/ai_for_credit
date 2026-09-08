@@ -22,6 +22,7 @@ services:
       - ../.env:/app/.env:ro
       - ./certs:/etc/letsencrypt:ro
       - ./certbot-www:/var/www/certbot:ro
+      - ./nginx:/etc/nginx/templates:ro
     restart: unless-stopped
 
 volumes:

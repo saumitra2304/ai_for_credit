@@ -18,12 +18,32 @@ const markdownComponents = {
   strong: ({ children }) => <strong className="markdown-strong">{children}</strong>,
   em: ({ children }) => <em className="markdown-em">{children}</em>,
   blockquote: ({ children }) => <blockquote className="markdown-quote">{children}</blockquote>,
-  code: ({ inline, children }) =>
-    inline ? <code className="markdown-code">{children}</code> : <code>{children}</code>,
+  a: ({ href, children }) => (
+    <a href={href} target="_blank" rel="noreferrer noopener" className="markdown-a">
+      {children}
+    </a>
+  ),
+  pre: ({ children }) => <pre className="markdown-pre">{children}</pre>,
+  code: ({ className, children }) => {
+    const block = Boolean(className)
+    if (block) {
+      return <code className={cn('markdown-code-block', className)}>{children}</code>
+    }
+    return <code className="markdown-code">{children}</code>
+  },
   table: ({ children }) => (
     <div className="markdown-table-wrap">
       <table>{children}</table>
     </div>
+  ),
+  thead: ({ children }) => <thead>{children}</thead>,
+  tbody: ({ children }) => <tbody>{children}</tbody>,
+  tr: ({ children }) => <tr>{children}</tr>,
+  th: ({ children }) => <th>{children}</th>,
+  td: ({ children, style }) => (
+    <td style={style} className="markdown-td">
+      {children}
+    </td>
   ),
 }
 

@@ -27,7 +27,23 @@ location ^~ /internal {
 
 location /api/search/ {
     auth_request $search_auth;
+    error_page 401 = @search_cors_401;
+    proxy_hide_header Access-Control-Allow-Origin;
+    proxy_hide_header Access-Control-Allow-Credentials;
     proxy_pass http://127.0.0.1:3000;
+    add_header Access-Control-Allow-Origin $http_origin always;
+    add_header Access-Control-Allow-Credentials true always;
+    add_header Access-Control-Allow-Headers "Authorization, Content-Type, X-Request-Id" always;
+    add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;
+}
+
+location @search_cors_401 {
+    add_header Access-Control-Allow-Origin $http_origin always;
+    add_header Access-Control-Allow-Credentials true always;
+    add_header Access-Control-Allow-Headers "Authorization, Content-Type, X-Request-Id" always;
+    add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;
+    default_type application/json;
+    return 401 '{"detail":"Invalid or expired session."}';
 }
 
 location /api/chat_history {

@@ -1,7 +1,7 @@
 use axum::{
     Router,
     extract::State,
-    http::{Method, StatusCode},
+    http::{header, HeaderName, Method, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -11,7 +11,7 @@ use std::env;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::{AllowOrigin, CorsLayer};
 
 mod ops;
 mod routes;
@@ -90,9 +90,14 @@ pub fn router(state: AppState) -> Router {
         ))
         .layer(
             CorsLayer::new()
-                .allow_origin(Any)
-                .allow_methods(Any)
-                .allow_headers(Any),
+                .allow_origin(AllowOrigin::mirror_request())
+                .allow_credentials(true)
+                .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+                .allow_headers([
+                    header::AUTHORIZATION,
+                    header::CONTENT_TYPE,
+                    HeaderName::from_static("x-request-id"),
+                ]),
         )
         .with_state(state)
 }

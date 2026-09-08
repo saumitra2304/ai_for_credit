@@ -127,58 +127,65 @@
     @apply border border-border/50 bg-card/60 backdrop-blur-xl;
   }
 
+  .markdown-body {
+    @apply max-w-none;
+  }
+
   .markdown-body h1,
   .markdown-h1 {
-    @apply mt-6 mb-3 border-b border-primary/20 pb-2 text-xl font-bold tracking-tight text-foreground;
+    @apply mt-7 mb-3 scroll-mt-4 text-[1.35rem] font-semibold tracking-tight text-foreground;
   }
 
   .markdown-h1 {
-    @apply flex items-center gap-2 border-l-[3px] border-b-0 border-primary pl-3;
-    background: linear-gradient(90deg, hsl(var(--primary) / 0.08), transparent 70%);
+    @apply rounded-lg border border-primary/15 bg-gradient-to-r from-primary/10 via-transparent to-transparent px-3.5 py-2;
   }
 
   .markdown-body h2,
   .markdown-h2 {
-    @apply mt-5 mb-2 text-lg font-semibold text-foreground;
+    @apply mt-6 mb-2.5 text-lg font-semibold tracking-tight text-foreground;
   }
 
   .markdown-h2 {
-    @apply rounded-md border-l-[3px] border-emerald-500/80 bg-emerald-500/8 px-3 py-1.5;
+    @apply border-b border-border/70 pb-1.5;
   }
 
   .markdown-body h3,
   .markdown-h3 {
-    @apply mt-4 mb-1.5 text-base font-semibold text-sky-700 dark:text-sky-300;
+    @apply mt-5 mb-1.5 text-[15px] font-semibold text-sky-800 dark:text-sky-300;
   }
 
   .markdown-h4 {
-    @apply mt-3 mb-1 text-sm font-medium text-muted-foreground;
+    @apply mt-4 mb-1 text-sm font-medium uppercase tracking-wide text-muted-foreground;
   }
 
   .markdown-p {
-    @apply my-1.5 leading-relaxed text-foreground/90;
+    @apply my-2.5 text-[15px] leading-[1.7] text-foreground/90;
   }
 
   .markdown-ul {
-    @apply my-2 ml-1 list-none space-y-1;
+    @apply my-2.5 ml-0 list-none space-y-1.5;
   }
 
   .markdown-ol {
-    @apply my-2 ml-5 list-decimal space-y-1;
+    @apply my-2.5 ml-5 list-decimal space-y-1.5 marker:font-medium marker:text-primary;
   }
 
   .markdown-li {
-    @apply relative pl-4 text-sm leading-relaxed text-foreground/90;
+    @apply relative pl-4 text-[15px] leading-[1.65] text-foreground/90;
   }
 
   .markdown-ul > .markdown-li::before {
     content: '';
-    @apply absolute left-0 top-2 h-1.5 w-1.5 rounded-full bg-primary;
+    @apply absolute left-0 top-[0.55em] h-1.5 w-1.5 rounded-full bg-primary/80;
+  }
+
+  .markdown-li .markdown-p {
+    @apply my-1;
   }
 
   .markdown-hr {
-    @apply my-5 h-px border-0;
-    background: linear-gradient(90deg, transparent, hsl(var(--primary) / 0.45), transparent);
+    @apply my-6 h-px border-0;
+    background: linear-gradient(90deg, transparent, hsl(var(--primary) / 0.4), transparent);
   }
 
   .markdown-strong {
@@ -186,63 +193,81 @@
   }
 
   .markdown-em {
-    @apply italic text-amber-800/90 dark:text-amber-200/90;
+    @apply italic text-foreground/80;
   }
 
   .markdown-quote {
-    @apply my-3 rounded-r-lg border-l-2 border-primary/60 bg-primary/5 py-2 pl-3 text-sm italic text-muted-foreground;
+    @apply my-4 rounded-r-xl border-l-[3px] border-primary/70 bg-primary/5 px-4 py-2.5 text-sm leading-relaxed text-muted-foreground;
+  }
+
+  .markdown-a {
+    @apply font-medium text-primary underline decoration-primary/30 underline-offset-2 transition-colors hover:decoration-primary;
   }
 
   .markdown-code {
-    @apply rounded bg-primary/10 px-1 py-0.5 font-mono text-[12px] text-primary;
+    @apply rounded-md bg-muted px-1.5 py-0.5 font-mono text-[13px] text-primary;
+  }
+
+  .markdown-pre {
+    @apply my-4 overflow-x-auto rounded-xl border border-border/60 bg-muted/60 p-3.5 text-[13px] leading-relaxed;
+  }
+
+  .markdown-code-block {
+    @apply font-mono text-[13px];
   }
 
   .markdown-table-wrap {
-    @apply my-3 overflow-x-auto rounded-xl border border-border/70 shadow-sm;
+    @apply my-4 overflow-x-auto rounded-xl border border-border/80 bg-card/40 shadow-sm;
   }
 
   .markdown-table-wrap table {
-    @apply mb-0 mt-0 w-full border-collapse text-xs;
+    @apply mb-0 mt-0 w-full min-w-[32rem] border-collapse text-[13px];
   }
 
   .markdown-body thead,
   .markdown-table-wrap thead {
-    @apply bg-primary/12;
+    @apply bg-muted/80;
   }
 
   .markdown-body th,
   .markdown-table-wrap th {
-    @apply border-b border-border/60 px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-foreground;
+    @apply sticky top-0 border-b border-border px-3.5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-foreground;
   }
 
   .markdown-body td,
-  .markdown-table-wrap td {
-    @apply border-b border-border/40 px-3 py-1.5 text-muted-foreground;
+  .markdown-table-wrap td,
+  .markdown-td {
+    @apply border-b border-border/50 px-3.5 py-2 align-top text-foreground/85;
+  }
+
+  .markdown-body tbody tr:hover,
+  .markdown-table-wrap tbody tr:hover {
+    @apply bg-primary/5;
   }
 
   .markdown-body tr:nth-child(even),
-  .markdown-table-wrap tr:nth-child(even) {
-    @apply bg-muted/25;
+  .markdown-table-wrap tbody tr:nth-child(even) {
+    @apply bg-muted/20;
   }
 
   .markdown-body p {
-    @apply my-1.5 leading-relaxed text-foreground/90;
+    @apply my-2.5 leading-[1.7] text-foreground/90;
   }
 
   .markdown-body ul {
-    @apply my-1.5 ml-4 list-disc space-y-0.5;
+    @apply my-2 ml-5 list-disc space-y-1;
   }
 
   .markdown-body ol {
-    @apply my-1.5 ml-4 list-decimal space-y-0.5;
+    @apply my-2 ml-5 list-decimal space-y-1;
   }
 
   .markdown-body li {
-    @apply leading-relaxed text-sm;
+    @apply leading-relaxed;
   }
 
   .markdown-body hr {
-    @apply my-3 border-border/60;
+    @apply my-5 border-border/60;
   }
 
   .markdown-body strong {
@@ -250,19 +275,19 @@
   }
 
   .markdown-body table {
-    @apply my-3 w-full border-collapse overflow-hidden rounded-lg text-xs;
+    @apply my-3 w-full border-collapse text-[13px];
   }
 
   .markdown-body blockquote {
-    @apply my-2 border-l-2 border-primary/50 pl-3 text-sm italic text-muted-foreground;
+    @apply my-3 border-l-[3px] border-primary/50 pl-3 text-sm italic text-muted-foreground;
   }
 
   .markdown-body code {
-    @apply rounded bg-muted/80 px-1 py-0.5 font-mono text-xs;
+    @apply rounded bg-muted/80 px-1 py-0.5 font-mono text-[13px];
   }
 
   .markdown-body pre {
-    @apply my-2 overflow-x-auto rounded-lg bg-muted/50 p-3 text-xs;
+    @apply my-3 overflow-x-auto rounded-xl bg-muted/50 p-3 text-[13px];
   }
 
   .scrollbar-thin {
