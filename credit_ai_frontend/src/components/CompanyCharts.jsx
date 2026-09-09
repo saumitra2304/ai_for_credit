@@ -24,6 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { fetchCompanyDetails } from '@/api/companyDetails'
 import { extractChartData, formatCrore } from '@/lib/chartData'
+import { formatGroupedNumber } from '@/lib/formatMoney'
 
 const COLORS = ['#60a5fa', '#34d399', '#fbbf24', '#a78bfa', '#f87171', '#22d3ee', '#c084fc', '#fb7185']
 
@@ -62,7 +63,9 @@ function PrettyTooltip({ active, payload, label, crores, suffix }) {
             {item.name}
           </span>
           <span className="font-medium tabular-nums text-foreground">
-            {crores ? formatCrore(item.value) : `${item.value ?? '—'}${suffix ?? ''}`}
+            {crores
+              ? formatCrore(item.value)
+              : `${formatGroupedNumber(item.value, 2)}${suffix ?? ''}`}
           </span>
         </p>
       ))}
@@ -81,7 +84,7 @@ function ChartCard({ title, description, children, empty }) {
         {empty ? (
           <p className="py-10 text-center text-xs text-muted-foreground">No data for this chart</p>
         ) : (
-          <div className="h-72">{children}</div>
+          <div className="h-56 sm:h-72">{children}</div>
         )}
       </CardContent>
     </Card>
@@ -92,6 +95,11 @@ const axis = {
   tick: TICK,
   tickLine: false,
   axisLine: { stroke: 'hsl(var(--border))' },
+}
+
+const valueAxis = {
+  ...axis,
+  tickFormatter: (v) => formatGroupedNumber(v, 1),
 }
 
 export function CompanyCharts({ companies, open, onClose }) {
@@ -130,7 +138,7 @@ export function CompanyCharts({ companies, open, onClose }) {
 
   return (
     <div className="absolute inset-0 z-20 flex flex-col bg-background/95 backdrop-blur-sm">
-      <header className="flex h-12 shrink-0 items-center justify-between border-b px-4">
+      <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b px-3 sm:px-4">
         <div className="flex min-w-0 items-center gap-2">
           <BarChart3 className="h-4 w-4 text-primary" />
           <div className="min-w-0">
@@ -141,7 +149,7 @@ export function CompanyCharts({ companies, open, onClose }) {
         <div className="flex items-center gap-2">
           {companies.length > 1 && (
             <select
-              className="h-8 max-w-[220px] rounded-md border bg-background px-2 text-xs"
+              className="h-8 max-w-[42vw] rounded-md border bg-background px-2 text-xs sm:max-w-[220px]"
               value={cin}
               onChange={(event) => setCin(event.target.value)}
             >
@@ -173,8 +181,8 @@ export function CompanyCharts({ companies, open, onClose }) {
 
       {!loading && !error && charts && (
         <Tabs defaultValue="financials" className="flex min-h-0 flex-1 flex-col">
-          <div className="shrink-0 border-b px-4 py-2">
-            <TabsList>
+          <div className="shrink-0 overflow-x-auto border-b px-3 py-2 sm:px-4">
+            <TabsList className="min-w-max">
               <TabsTrigger value="financials">Financials</TabsTrigger>
               <TabsTrigger value="credit">Credit</TabsTrigger>
               <TabsTrigger value="peers">Peers</TabsTrigger>
@@ -182,8 +190,8 @@ export function CompanyCharts({ companies, open, onClose }) {
             </TabsList>
           </div>
           <ScrollArea className="min-h-0 flex-1">
-            <TabsContent value="financials" className="p-4">
-              <div className="grid gap-4 lg:grid-cols-2">
+            <TabsContent value="financials" className="p-3 sm:p-4">
+              <div className="grid gap-4 md:grid-cols-2">
                 <ChartCard title="Revenue and profit" description="Standalone, ₹ crore" empty={!charts.pnl.length}>
                   <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart data={charts.pnl}>
@@ -195,7 +203,7 @@ export function CompanyCharts({ companies, open, onClose }) {
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.7} />
                       <XAxis dataKey="year" {...axis} />
-                      <YAxis {...axis} tickFormatter={(v) => v} />
+                      <YAxis {...valueAxis} />
                       <Tooltip content={<PrettyTooltip crores />} />
                       <Legend content={<ChartLegend />} />
                       <Area type="monotone" dataKey="revenue" name="Revenue" stroke={COLORS[0]} fill="url(#revFill)" strokeWidth={2.4} />
@@ -209,7 +217,7 @@ export function CompanyCharts({ companies, open, onClose }) {
                     <BarChart data={charts.growth}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.7} />
                       <XAxis dataKey="year" {...axis} />
-                      <YAxis {...axis} />
+                      <YAxis {...valueAxis} />
                       <Tooltip content={<PrettyTooltip suffix="%" />} />
                       <Legend content={<ChartLegend />} />
                       <Bar dataKey="revenue" name="Revenue" fill={COLORS[0]} radius={[4, 4, 0, 0]} />
@@ -223,7 +231,7 @@ export function CompanyCharts({ companies, open, onClose }) {
                     <LineChart data={charts.ratios}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.7} />
                       <XAxis dataKey="year" {...axis} />
-                      <YAxis {...axis} />
+                      <YAxis {...valueAxis} />
                       <Tooltip content={<PrettyTooltip suffix="%" />} />
                       <Legend content={<ChartLegend />} />
                       <Line type="monotone" dataKey="ebitdaMargin" name="EBITDA margin" stroke={COLORS[0]} strokeWidth={2.2} dot={{ r: 3 }} />
@@ -238,8 +246,8 @@ export function CompanyCharts({ companies, open, onClose }) {
                     <ComposedChart data={charts.leverage}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.7} />
                       <XAxis dataKey="year" {...axis} />
-                      <YAxis {...axis} yAxisId="left" />
-                      <YAxis {...axis} yAxisId="right" orientation="right" />
+                      <YAxis {...valueAxis} yAxisId="left" />
+                      <YAxis {...valueAxis} yAxisId="right" orientation="right" />
                       <Tooltip content={<PrettyTooltip />} />
                       <Legend content={<ChartLegend />} />
                       <Bar yAxisId="left" dataKey="debtEquity" name="Debt / equity" fill={COLORS[4]} radius={[4, 4, 0, 0]} />
@@ -252,7 +260,7 @@ export function CompanyCharts({ companies, open, onClose }) {
                     <BarChart data={charts.balanceSheet}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.7} />
                       <XAxis dataKey="year" {...axis} />
-                      <YAxis {...axis} />
+                      <YAxis {...valueAxis} />
                       <Tooltip content={<PrettyTooltip crores />} />
                       <Legend content={<ChartLegend />} />
                       <Bar dataKey="equity" name="Equity" fill={COLORS[1]} radius={[4, 4, 0, 0]} />
@@ -265,7 +273,7 @@ export function CompanyCharts({ companies, open, onClose }) {
                     <LineChart data={charts.liquidity}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.7} />
                       <XAxis dataKey="year" {...axis} />
-                      <YAxis {...axis} />
+                      <YAxis {...valueAxis} />
                       <Tooltip content={<PrettyTooltip />} />
                       <Legend content={<ChartLegend />} />
                       <Line type="monotone" dataKey="currentRatio" name="Current ratio" stroke={COLORS[0]} strokeWidth={2.3} dot={{ r: 3 }} />
@@ -278,7 +286,7 @@ export function CompanyCharts({ companies, open, onClose }) {
                     <BarChart data={charts.liquidity}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.7} />
                       <XAxis dataKey="year" {...axis} />
-                      <YAxis {...axis} />
+                      <YAxis {...valueAxis} />
                       <Tooltip content={<PrettyTooltip crores />} />
                       <Legend content={<ChartLegend />} />
                       <Bar dataKey="currentAssets" name="Current assets" fill={COLORS[0]} radius={[4, 4, 0, 0]} />
@@ -291,7 +299,7 @@ export function CompanyCharts({ companies, open, onClose }) {
                     <BarChart data={charts.cashFlow}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.7} />
                       <XAxis dataKey="year" {...axis} />
-                      <YAxis {...axis} />
+                      <YAxis {...valueAxis} />
                       <Tooltip content={<PrettyTooltip crores />} />
                       <Legend content={<ChartLegend />} />
                       <Bar dataKey="operating" name="Operating" fill={COLORS[1]} radius={[4, 4, 0, 0]} />
@@ -302,13 +310,13 @@ export function CompanyCharts({ companies, open, onClose }) {
                 </ChartCard>
               </div>
             </TabsContent>
-            <TabsContent value="credit" className="p-4">
-              <div className="grid gap-4 lg:grid-cols-2">
+            <TabsContent value="credit" className="p-3 sm:p-4">
+              <div className="grid gap-4 md:grid-cols-2">
                 <ChartCard title="Probe financial scores" description="1–5 scale" empty={!charts.probeScores.length}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={charts.probeScores} layout="vertical" margin={{ left: 24 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.7} />
-                      <XAxis type="number" domain={[0, 5]} {...axis} />
+                      <XAxis type="number" domain={[0, 5]} {...valueAxis} />
                       <YAxis type="category" dataKey="name" width={96} {...axis} />
                       <Tooltip content={<PrettyTooltip />} />
                       <Bar dataKey="value" name="Score" radius={[0, 6, 6, 0]}>
@@ -324,7 +332,7 @@ export function CompanyCharts({ companies, open, onClose }) {
                     <LineChart data={charts.workingCapital}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.7} />
                       <XAxis dataKey="year" {...axis} />
-                      <YAxis {...axis} />
+                      <YAxis {...valueAxis} />
                       <Tooltip content={<PrettyTooltip />} />
                       <Legend content={<ChartLegend />} />
                       <Line type="monotone" dataKey="inventoryDays" name="Inventory" stroke={COLORS[0]} strokeWidth={2.2} dot={{ r: 3 }} />
@@ -339,7 +347,7 @@ export function CompanyCharts({ companies, open, onClose }) {
                     <AreaChart data={charts.msmeTrend}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.7} />
                       <XAxis dataKey="period" {...axis} interval={0} />
-                      <YAxis {...axis} />
+                      <YAxis {...valueAxis} />
                       <Tooltip content={<PrettyTooltip crores />} />
                       <Area type="monotone" dataKey="amount" name="Overdue" stroke={COLORS[4]} fill={COLORS[4]} fillOpacity={0.2} strokeWidth={2.2} />
                     </AreaChart>
@@ -349,7 +357,7 @@ export function CompanyCharts({ companies, open, onClose }) {
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={charts.msmeSuppliers} layout="vertical" margin={{ left: 16 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.7} />
-                      <XAxis type="number" {...axis} />
+                      <XAxis type="number" {...valueAxis} />
                       <YAxis type="category" dataKey="name" width={120} {...axis} />
                       <Tooltip content={<PrettyTooltip crores />} />
                       <Bar dataKey="amount" name="Due" fill={COLORS[2]} radius={[0, 6, 6, 0]} />
@@ -358,13 +366,13 @@ export function CompanyCharts({ companies, open, onClose }) {
                 </ChartCard>
               </div>
             </TabsContent>
-            <TabsContent value="peers" className="p-4">
-              <div className="grid gap-4 lg:grid-cols-2">
+            <TabsContent value="peers" className="p-3 sm:p-4">
+              <div className="grid gap-4 md:grid-cols-2">
                 <ChartCard title="Peer revenue" description="₹ crore" empty={!charts.peers.length}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={charts.peers} layout="vertical" margin={{ left: 16 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.7} />
-                      <XAxis type="number" {...axis} />
+                      <XAxis type="number" {...valueAxis} />
                       <YAxis type="category" dataKey="name" width={140} {...axis} />
                       <Tooltip content={<PrettyTooltip crores />} />
                       <Bar dataKey="revenue" name="Revenue" fill={COLORS[0]} radius={[0, 6, 6, 0]} />
@@ -376,7 +384,7 @@ export function CompanyCharts({ companies, open, onClose }) {
                     <BarChart data={charts.peerBench}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.7} />
                       <XAxis dataKey="metric" {...axis} />
-                      <YAxis {...axis} />
+                      <YAxis {...valueAxis} />
                       <Tooltip content={<PrettyTooltip />} />
                       <Legend content={<ChartLegend />} />
                       <Bar dataKey="company" name="Company" fill={COLORS[0]} radius={[4, 4, 0, 0]} />
@@ -388,7 +396,7 @@ export function CompanyCharts({ companies, open, onClose }) {
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={charts.relatedParties} layout="vertical" margin={{ left: 8 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.7} />
-                      <XAxis type="number" {...axis} />
+                      <XAxis type="number" {...valueAxis} />
                       <YAxis type="category" dataKey="name" width={160} {...axis} />
                       <Tooltip content={<PrettyTooltip crores />} />
                       <Bar dataKey="amount" name="Amount" fill={COLORS[3]} radius={[0, 6, 6, 0]} />
@@ -410,14 +418,14 @@ export function CompanyCharts({ companies, open, onClose }) {
                 </ChartCard>
               </div>
             </TabsContent>
-            <TabsContent value="other" className="p-4">
-              <div className="grid gap-4 lg:grid-cols-2">
+            <TabsContent value="other" className="p-3 sm:p-4">
+              <div className="grid gap-4 md:grid-cols-2">
                 <ChartCard title="Legal cases by status" empty={!charts.legalByStatus.length}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={charts.legalByStatus}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.7} />
                       <XAxis dataKey="name" {...axis} />
-                      <YAxis allowDecimals={false} {...axis} />
+                      <YAxis allowDecimals={false} {...valueAxis} />
                       <Tooltip content={<PrettyTooltip />} />
                       <Bar dataKey="value" name="Cases" radius={[4, 4, 0, 0]}>
                         {charts.legalByStatus.map((_, i) => (
@@ -457,7 +465,7 @@ export function CompanyCharts({ companies, open, onClose }) {
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={charts.gstByState} layout="vertical" margin={{ left: 8 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.7} />
-                      <XAxis type="number" allowDecimals={false} {...axis} />
+                      <XAxis type="number" allowDecimals={false} {...valueAxis} />
                       <YAxis type="category" dataKey="name" width={120} {...axis} />
                       <Tooltip content={<PrettyTooltip />} />
                       <Bar dataKey="value" name="GSTINs" fill={COLORS[5]} radius={[0, 6, 6, 0]} />
@@ -469,7 +477,7 @@ export function CompanyCharts({ companies, open, onClose }) {
                     <BarChart data={charts.gstTimeliness}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.7} />
                       <XAxis dataKey="name" {...axis} />
-                      <YAxis allowDecimals={false} {...axis} />
+                      <YAxis allowDecimals={false} {...valueAxis} />
                       <Tooltip content={<PrettyTooltip />} />
                       <Bar dataKey="value" name="Registrations" fill={COLORS[1]} radius={[4, 4, 0, 0]} />
                     </BarChart>

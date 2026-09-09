@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ThemeToggle } from '@/components/ThemeToggle'
+import { SidebarToggle } from '@/components/LeftSidebar'
 import * as adminApi from '@/api/admin'
 
 const SETTING_LABELS = {
@@ -38,8 +39,9 @@ export function AdminPage() {
 
   return (
     <main className="flex h-full min-w-0 flex-1 flex-col">
-      <header className="glass-panel flex h-12 shrink-0 items-center justify-between border-b px-5">
-        <div className="flex items-center gap-3">
+      <header className="glass-panel flex h-12 shrink-0 items-center justify-between gap-2 border-b px-3 sm:px-5">
+        <div className="flex min-w-0 items-center gap-2">
+          <SidebarToggle />
           <Button variant="ghost" size="sm" asChild>
             <Link to="/app">
               <ArrowLeft className="h-3.5 w-3.5" />
@@ -49,13 +51,13 @@ export function AdminPage() {
           <h1 className="text-sm font-semibold">Admin</h1>
         </div>
         <div className="flex items-center gap-2">
-          <p className="text-xs text-muted-foreground">Keys, logs, traces, and metrics</p>
+          <p className="hidden text-xs text-muted-foreground sm:block">Keys, logs, traces, and metrics</p>
           <ThemeToggle />
         </div>
       </header>
 
-      <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col px-5 py-4">
-        <TabsList className="w-fit shrink-0">
+      <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col px-3 py-4 sm:px-5">
+        <TabsList className="flex h-auto w-full flex-wrap sm:w-fit">
           <TabsTrigger value="keys">
             <KeyRound className="h-3.5 w-3.5" />
             Keys

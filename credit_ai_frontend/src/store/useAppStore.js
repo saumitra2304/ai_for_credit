@@ -12,15 +12,20 @@ export const useAppStore = create((set, get) => ({
   historyVersion: 0,
   recoveredNotice: initial.recovered,
   sidebarTab: 'search',
+  mobileSidebarOpen: false,
 
   setSidebarTab: (sidebarTab) => set({ sidebarTab }),
+  setMobileSidebarOpen: (mobileSidebarOpen) => set({ mobileSidebarOpen }),
 
   dismissRecovered: () => set({ recoveredNotice: false }),
 
   selectCompany: (company) =>
     set((state) => {
       if (state.selectedCompanies.some((c) => c.id === company.id)) return state
-      return { selectedCompanies: [...state.selectedCompanies, company] }
+      return {
+        selectedCompanies: [...state.selectedCompanies, company],
+        mobileSidebarOpen: false,
+      }
     }),
 
   removeCompany: (id) =>
@@ -53,6 +58,7 @@ export const useAppStore = create((set, get) => ({
       messages: [],
       selectedCompanies: [],
       sessionKey: state.sessionKey + 1,
+      mobileSidebarOpen: false,
     }))
   },
 
@@ -64,6 +70,7 @@ export const useAppStore = create((set, get) => ({
       selectedCompanies: session.companies,
       messages: session.messages,
       sessionKey: state.sessionKey + 1,
+      mobileSidebarOpen: false,
     }))
   },
 
@@ -74,6 +81,7 @@ export const useAppStore = create((set, get) => ({
       activeChatId: newChatId(),
       messages: [],
       sessionKey: state.sessionKey + 1,
+      mobileSidebarOpen: false,
     }))
   },
 

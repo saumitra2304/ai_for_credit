@@ -128,30 +128,19 @@
   }
 
   .markdown-body {
-    @apply max-w-none;
-  }
-
-  .markdown-body h1,
-  .markdown-h1 {
-    @apply mt-7 mb-3 scroll-mt-4 text-[1.35rem] font-semibold tracking-tight text-foreground;
+    @apply max-w-none break-words;
   }
 
   .markdown-h1 {
-    @apply rounded-lg border border-primary/15 bg-gradient-to-r from-primary/10 via-transparent to-transparent px-3.5 py-2;
-  }
-
-  .markdown-body h2,
-  .markdown-h2 {
-    @apply mt-6 mb-2.5 text-lg font-semibold tracking-tight text-foreground;
+    @apply mt-6 mb-3 scroll-mt-4 rounded-lg border border-primary/15 bg-gradient-to-r from-primary/10 via-transparent to-transparent px-3 py-2 text-[1.2rem] font-semibold tracking-tight text-foreground sm:text-[1.35rem];
   }
 
   .markdown-h2 {
-    @apply border-b border-border/70 pb-1.5;
+    @apply mt-5 mb-2.5 border-b border-border/70 pb-1.5 text-base font-semibold tracking-tight text-foreground sm:text-lg;
   }
 
-  .markdown-body h3,
   .markdown-h3 {
-    @apply mt-5 mb-1.5 text-[15px] font-semibold text-sky-800 dark:text-sky-300;
+    @apply mt-4 mb-1.5 text-[15px] font-semibold text-sky-800 dark:text-sky-300;
   }
 
   .markdown-h4 {
@@ -163,20 +152,23 @@
   }
 
   .markdown-ul {
-    @apply my-2.5 ml-0 list-none space-y-1.5;
+    @apply my-2.5 list-disc space-y-1.5 pl-5 marker:text-primary;
+  }
+
+  .markdown-ul .markdown-ul {
+    @apply my-1.5 list-[circle];
   }
 
   .markdown-ol {
-    @apply my-2.5 ml-5 list-decimal space-y-1.5 marker:font-medium marker:text-primary;
+    @apply my-2.5 list-decimal space-y-1.5 pl-5 marker:font-medium marker:text-primary;
+  }
+
+  .markdown-ol .markdown-ol {
+    @apply my-1.5 list-[lower-alpha];
   }
 
   .markdown-li {
-    @apply relative pl-4 text-[15px] leading-[1.65] text-foreground/90;
-  }
-
-  .markdown-ul > .markdown-li::before {
-    content: '';
-    @apply absolute left-0 top-[0.55em] h-1.5 w-1.5 rounded-full bg-primary/80;
+    @apply pl-0.5 text-[15px] leading-[1.65] text-foreground/90;
   }
 
   .markdown-li .markdown-p {
@@ -217,77 +209,32 @@
   }
 
   .markdown-table-wrap {
-    @apply my-4 overflow-x-auto rounded-xl border border-border/80 bg-card/40 shadow-sm;
+    @apply my-4 -mx-1 overflow-x-auto rounded-xl border border-border/80 bg-card/40 shadow-sm sm:mx-0;
   }
 
   .markdown-table-wrap table {
-    @apply mb-0 mt-0 w-full min-w-[32rem] border-collapse text-[13px];
+    @apply mb-0 mt-0 w-full min-w-[28rem] border-collapse text-[13px];
   }
 
-  .markdown-body thead,
   .markdown-table-wrap thead {
     @apply bg-muted/80;
   }
 
-  .markdown-body th,
   .markdown-table-wrap th {
-    @apply sticky top-0 border-b border-border px-3.5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-foreground;
+    @apply sticky top-0 border-b border-border px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-foreground sm:px-3.5;
   }
 
-  .markdown-body td,
   .markdown-table-wrap td,
   .markdown-td {
-    @apply border-b border-border/50 px-3.5 py-2 align-top text-foreground/85;
+    @apply border-b border-border/50 px-3 py-2 align-top text-foreground/85 tabular-nums sm:px-3.5;
   }
 
-  .markdown-body tbody tr:hover,
   .markdown-table-wrap tbody tr:hover {
     @apply bg-primary/5;
   }
 
-  .markdown-body tr:nth-child(even),
   .markdown-table-wrap tbody tr:nth-child(even) {
     @apply bg-muted/20;
-  }
-
-  .markdown-body p {
-    @apply my-2.5 leading-[1.7] text-foreground/90;
-  }
-
-  .markdown-body ul {
-    @apply my-2 ml-5 list-disc space-y-1;
-  }
-
-  .markdown-body ol {
-    @apply my-2 ml-5 list-decimal space-y-1;
-  }
-
-  .markdown-body li {
-    @apply leading-relaxed;
-  }
-
-  .markdown-body hr {
-    @apply my-5 border-border/60;
-  }
-
-  .markdown-body strong {
-    @apply font-semibold text-foreground;
-  }
-
-  .markdown-body table {
-    @apply my-3 w-full border-collapse text-[13px];
-  }
-
-  .markdown-body blockquote {
-    @apply my-3 border-l-[3px] border-primary/50 pl-3 text-sm italic text-muted-foreground;
-  }
-
-  .markdown-body code {
-    @apply rounded bg-muted/80 px-1 py-0.5 font-mono text-[13px];
-  }
-
-  .markdown-body pre {
-    @apply my-3 overflow-x-auto rounded-xl bg-muted/50 p-3 text-[13px];
   }
 
   .scrollbar-thin {
@@ -309,7 +256,7 @@
   }
 
   .chat-content-width {
-    @apply mx-auto w-full max-w-[min(1200px,calc(100%-2rem))] px-4 sm:px-8;
+    @apply mx-auto w-full max-w-[min(1200px,100%)] px-3 sm:px-8;
   }
 
   .thinking-scan {

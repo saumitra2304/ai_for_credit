@@ -117,7 +117,7 @@ export function LandingPage() {
         transition={{ duration: 11, repeat: Infinity, ease: 'easeInOut' }}
       />
 
-      <header className="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-5">
+      <header className="relative z-10 mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6 sm:py-5">
         <Link to="/" aria-label="Kuber home">
           <KuberLogo size={36} showWordmark />
         </Link>
@@ -143,7 +143,7 @@ export function LandingPage() {
         </div>
       </header>
 
-      <main className="relative z-10 mx-auto w-full max-w-6xl px-6 pb-8 pt-8 lg:pt-14">
+      <main className="relative z-10 mx-auto w-full max-w-6xl px-4 pb-8 pt-6 sm:px-6 lg:pt-14">
         <div className="grid gap-12 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
           <div>
             <motion.p
@@ -161,7 +161,7 @@ export function LandingPage() {
               variants={fadeUp}
               initial="hidden"
               animate="show"
-              className="mt-5 text-4xl font-semibold tracking-tight text-foreground sm:text-5xl lg:text-[3.15rem] lg:leading-[1.12]"
+              className="mt-5 text-3xl font-semibold tracking-tight text-foreground sm:text-5xl lg:text-[3.15rem] lg:leading-[1.12]"
             >
               See the borrower before you take the risk.
             </motion.h1>
@@ -224,7 +224,7 @@ export function LandingPage() {
             </div>
             <p className="mt-3 text-lg font-semibold">Godrej Properties Limited</p>
             <p className="font-mono text-xs text-muted-foreground">CIN L74120MH1985PLC035308</p>
-            <div className="mt-5 grid grid-cols-3 gap-3 text-center">
+            <div className="mt-5 grid grid-cols-3 gap-2 text-center sm:gap-3">
               {[
                 ['Revenue', 'From filings'],
                 ['Leverage', 'Tracked'],
@@ -262,7 +262,7 @@ export function LandingPage() {
         </div>
       </main>
 
-      <section className="relative z-10 mx-auto w-full max-w-6xl px-6 py-16">
+      <section className="relative z-10 mx-auto w-full max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
         <motion.h2
           initial={{ opacity: 0, y: 12 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -294,7 +294,7 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section className="relative z-10 mx-auto w-full max-w-6xl px-6 py-8">
+      <section className="relative z-10 mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
         <motion.h2
           initial={{ opacity: 0, y: 12 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -321,7 +321,7 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section className="relative z-10 mx-auto w-full max-w-6xl px-6 py-16">
+      <section className="relative z-10 mx-auto w-full max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
         <motion.h2
           initial={{ opacity: 0, y: 12 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -349,12 +349,12 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section className="relative z-10 mx-auto w-full max-w-6xl px-6 pb-20">
+      <section className="relative z-10 mx-auto w-full max-w-6xl px-4 pb-20 sm:px-6">
         <motion.div
           initial={{ opacity: 0, scale: 0.98 }}
           whileInView={{ opacity: 1, scale: 1 }}
           viewport={{ once: true }}
-          className="glass-panel overflow-hidden rounded-3xl border px-6 py-10 text-center sm:px-12"
+          className="glass-panel overflow-hidden rounded-3xl border px-5 py-10 text-center sm:px-12"
         >
           <Sparkles className="mx-auto h-6 w-6 text-primary" />
           <h2 className="mt-3 text-2xl font-semibold tracking-tight">

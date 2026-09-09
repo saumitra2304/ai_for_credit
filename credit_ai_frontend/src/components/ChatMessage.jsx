@@ -1,9 +1,10 @@
-import { memo } from 'react'
+import { memo, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Bot, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { formatChatMarkdown } from '@/lib/formatChatMarkdown'
 
 const markdownComponents = {
   h1: ({ children }) => <h1 className="markdown-h1">{children}</h1>,
@@ -49,6 +50,10 @@ const markdownComponents = {
 
 export const ChatMessage = memo(function ChatMessage({ role, content, isStreaming }) {
   const isUser = role === 'user'
+  const rendered = useMemo(
+    () => (isUser ? content : formatChatMarkdown(content ?? '')),
+    [isUser, content]
+  )
 
   return (
     <motion.div
@@ -58,7 +63,7 @@ export const ChatMessage = memo(function ChatMessage({ role, content, isStreamin
       className={cn('w-full', isUser ? 'bg-muted/20' : 'bg-transparent')}
       style={{ overflowAnchor: isStreaming ? 'none' : 'auto' }}
     >
-      <div className="chat-content-width flex gap-4 py-5">
+      <div className="chat-content-width flex gap-3 py-4 sm:gap-4 sm:py-5">
         <div
           className={cn(
             'mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-sm',
@@ -74,10 +79,10 @@ export const ChatMessage = memo(function ChatMessage({ role, content, isStreamin
           </p>
           <div className="markdown-body text-[15px] leading-relaxed text-foreground/95">
             {isUser ? (
-              <p className="whitespace-pre-wrap">{content}</p>
+              <p className="whitespace-pre-wrap">{rendered}</p>
             ) : (
               <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                {content}
+                {rendered}
               </ReactMarkdown>
             )}
             {isStreaming && (

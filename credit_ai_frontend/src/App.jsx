@@ -18,7 +18,7 @@ function MainApp() {
   return (
     <div className="relative flex h-screen overflow-hidden">
       <div className="mesh-bg pointer-events-none absolute inset-0" />
-      <div className="relative flex h-full w-full">
+      <div className="relative flex h-full w-full min-w-0">
         <LeftSidebar />
         <ChatInterface />
       </div>
@@ -109,7 +109,7 @@ function AdminApp() {
   return (
     <div className="relative flex h-screen overflow-hidden">
       <div className="mesh-bg pointer-events-none absolute inset-0" />
-      <div className="relative flex h-full w-full">
+      <div className="relative flex h-full w-full min-w-0">
         <LeftSidebar />
         <AdminPage />
       </div>

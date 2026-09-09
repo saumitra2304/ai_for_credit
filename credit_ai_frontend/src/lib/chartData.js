@@ -24,7 +24,7 @@ export function crore(value) {
 
 export function formatCrore(value) {
   if (value == null) return '—'
-  return `₹${value.toLocaleString('en-IN', { maximumFractionDigits: 1 })} cr`
+  return `₹${Number(value).toLocaleString('en-IN', { maximumFractionDigits: 1 })} crore`
 }
 
 export function formatInr(value) {

@@ -11,6 +11,7 @@ import { CompanyCharts } from '@/components/CompanyCharts'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { ThinkingPanel } from '@/components/ThinkingPanel'
 import { KuberLogo } from '@/components/KuberLogo'
+import { SidebarToggle } from '@/components/LeftSidebar'
 import { useChatScroll } from '@/hooks/useChatScroll'
 import {
   streamChatMessage,
@@ -328,14 +329,15 @@ export function ChatInterface() {
   }
 
   return (
-    <main key={sessionKey} className="flex h-full flex-1 flex-col">
-      <header className="glass-panel flex h-12 shrink-0 items-center justify-between border-b px-5">
-        <div className="flex items-center gap-2.5">
-          <KuberLogo size={28} showWordmark />
-          <p className="text-[10px] text-muted-foreground">Intelligence workspace</p>
+    <main key={sessionKey} className="flex h-full min-w-0 flex-1 flex-col">
+      <header className="glass-panel flex h-12 shrink-0 items-center justify-between gap-2 border-b px-3 sm:px-5">
+        <div className="flex min-w-0 items-center gap-2">
+          <SidebarToggle />
+          <KuberLogo size={28} showWordmark className="min-w-0 [&>span]:hidden sm:[&>span]:inline" />
+          <p className="hidden text-[10px] text-muted-foreground md:block">Intelligence workspace</p>
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-1">
           {activeChatId && (
             <Badge variant="outline" className="h-5 px-1.5 font-mono text-[10px]">
               {formatChatIdLabel(activeChatId)}
@@ -360,7 +362,7 @@ export function ChatInterface() {
                   onClick={() => setChartsOpen(true)}
                 >
                   <BarChart3 className="h-3.5 w-3.5" />
-                  Show charts
+                  <span className="hidden sm:inline">Show charts</span>
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Financial and credit charts</TooltipContent>
@@ -412,9 +414,9 @@ export function ChatInterface() {
                   className="chat-content-width mt-3 flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/8 px-4 py-2.5 text-xs"
                 >
                   <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
-                  <div className="flex-1 text-amber-100/90">
-                    <p className="font-medium text-amber-200">Session restored</p>
-                    <p className="mt-0.5 text-amber-100/70">
+                  <div className="flex-1 text-amber-950 dark:text-amber-100/90">
+                    <p className="font-medium text-amber-900 dark:text-amber-200">Session restored</p>
+                    <p className="mt-0.5 text-amber-800/80 dark:text-amber-100/70">
                       Partial progress recovered after interruption.
                     </p>
                   </div>
@@ -430,7 +432,7 @@ export function ChatInterface() {
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4 }}
-                className="chat-content-width flex flex-col items-center py-16 text-center"
+                className="chat-content-width flex flex-col items-center px-1 py-10 text-center sm:py-16"
               >
                 <KuberLogo size={48} />
                 <h2 className="mt-4 text-lg font-semibold">Credit Intelligence</h2>
@@ -444,7 +446,7 @@ export function ChatInterface() {
                     <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
                       Suggestions
                     </p>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       {SUGGESTED_PROMPTS.map((prompt, i) => (
                         <motion.button
                           key={prompt}
@@ -539,7 +541,7 @@ export function ChatInterface() {
         </AnimatePresence>
       </div>
 
-      <div className="shrink-0 border-t border-border/40 px-4 py-4">
+      <div className="shrink-0 border-t border-border/40 px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-4 sm:py-4">
         <div className="chat-content-width flex items-end gap-3">
           <div className="flex flex-1 items-center gap-2 rounded-2xl border border-border/50 bg-card/40 px-4 py-2.5 shadow-sm backdrop-blur-sm transition-shadow focus-within:border-primary/30 focus-within:ring-1 focus-within:ring-primary/15">
             <Input
