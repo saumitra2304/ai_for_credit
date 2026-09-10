@@ -442,7 +442,7 @@ def _slim_followup_history(chat_history):
     )
 
 
-def _prepare_chat(request: ChatRequest, user_id: int):
+async def _prepare_chat(request: ChatRequest, user_id: int):
     semaphore = app.state.semaphore_sme_financials
     client = app.state.client
     chat_history = await get_chat(user_id, request.chat_id)
