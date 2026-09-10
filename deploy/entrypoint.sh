@@ -7,10 +7,30 @@ export SME_API_PORT="${SME_API_PORT:-3000}"
 export DOMAIN="${DOMAIN:-_}"
 export INTERNAL_TOKEN="${INTERNAL_TOKEN:-}"
 
+_env_val() {
+  _key="$1"
+  [ -f /app/.env ] || return 0
+  _line=$(grep -E "^${_key}=" /app/.env | tail -1) || true
+  [ -n "$_line" ] || return 0
+  _val=${_line#*=}
+  _val=${_val%"${_val##*[![:space:]]}"}
+  _val=${_val#\"}
+  _val=${_val%\"}
+  _val=${_val#\'}
+  _val=${_val%\'}
+  export "${_key}=${_val}"
+}
+
 mkdir -p /data /var/www/certbot /var/log/nginx
 
 if [ -f /app/.env ]; then
   cp /app/.env /app/reasoning_layer/.env 2>/dev/null || true
+  if [ -z "${DOMAIN}" ] || [ "${DOMAIN}" = "_" ]; then
+    _env_val DOMAIN
+  fi
+  if [ -z "${INTERNAL_TOKEN}" ]; then
+    _env_val INTERNAL_TOKEN
+  fi
 fi
 
 CERT="/etc/letsencrypt/live/${DOMAIN}/fullchain.pem"
