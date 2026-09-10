@@ -43,8 +43,23 @@ location ^~ /internal {
     return 404;
 }
 
+location = /search-options-ok {
+    internal;
+    add_header Content-Length 0;
+    return 204;
+}
+
 location /api/search/ {
-    auth_request $search_auth;
+    if ($request_method = OPTIONS) {
+        add_header Access-Control-Allow-Origin $http_origin always;
+        add_header Access-Control-Allow-Credentials true always;
+        add_header Access-Control-Allow-Headers "Authorization, Content-Type, X-Request-Id" always;
+        add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;
+        add_header Access-Control-Max-Age 86400 always;
+        add_header Content-Length 0;
+        return 204;
+    }
+    auth_request /internal-auth-check;
     error_page 401 = @search_cors_401;
     proxy_hide_header Access-Control-Allow-Origin;
     proxy_hide_header Access-Control-Allow-Credentials;

@@ -1,6 +1,6 @@
 map $request_method $search_auth {
-    OPTIONS "";
-    default "/internal-auth-check";
+    OPTIONS /search-options-ok;
+    default /internal-auth-check;
 }
 
 server {
