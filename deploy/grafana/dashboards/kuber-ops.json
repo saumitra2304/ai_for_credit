@@ -1,0 +1,141 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "title": "Request rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        {
+          "expr": "sum(rate(kuber_http_requests_total[5m]))",
+          "legendFormat": "api",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(kuber_sme_http_requests_total[5m]))",
+          "legendFormat": "sme",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "title": "HTTP errors",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(kuber_http_requests_total{status=~\"5..\"}[5m]))",
+          "legendFormat": "api 5xx",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(kuber_http_requests_total{status=~\"4..\"}[5m]))",
+          "legendFormat": "api 4xx",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(kuber_sme_errors_total[5m]))",
+          "legendFormat": "sme errors",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "title": "API latency p95",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, path) (rate(kuber_http_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{path}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "In flight",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "kuber_chat_in_flight", "legendFormat": "chat", "refId": "A" },
+        { "expr": "kuber_llm_in_flight", "legendFormat": "llm", "refId": "B" },
+        { "expr": "kuber_memo_in_flight", "legendFormat": "memo", "refId": "C" },
+        { "expr": "kuber_probe_in_flight", "legendFormat": "probe py", "refId": "D" },
+        { "expr": "kuber_sme_in_flight", "legendFormat": "sme", "refId": "E" }
+      ]
+    },
+    {
+      "title": "Exceptions",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (type, path) (rate(kuber_exceptions_total[5m]))",
+          "legendFormat": "{{type}} {{path}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Logs by level",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (level) (rate(kuber_log_events_total[5m]))",
+          "legendFormat": "{{level}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "LLM / Probe failures",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum(rate(kuber_llm_errors_total[5m]))", "legendFormat": "llm", "refId": "A" },
+        { "expr": "sum(rate(kuber_probe_errors_total[5m]))", "legendFormat": "probe", "refId": "B" },
+        { "expr": "sum(rate(kuber_sme_upstream_retries_total[5m]))", "legendFormat": "sme retries", "refId": "C" }
+      ]
+    },
+    {
+      "title": "Probe latency",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(kuber_probe_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{route}} p95",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "tags": ["kuber"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Kuber operations",
+  "uid": "kuber-ops",
+  "version": 1
+}

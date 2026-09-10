@@ -40,6 +40,8 @@ export default defineConfig({
       '/api/chat': {
         target: 'http://127.0.0.1:8001',
         changeOrigin: true,
+        timeout: 600000,
+        proxyTimeout: 600000,
         rewrite: (p) => p.replace(/^\/api\/chat/, '/chat'),
         configure: (proxy) => {
           proxy.on('proxyRes', (proxyRes) => {

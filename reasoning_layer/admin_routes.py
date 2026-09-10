@@ -1,33 +1,12 @@
 import asyncio
-import uuid
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import Response
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
-from pydantic import BaseModel
 
 from auth_routes import require_admin
 from sme_api.base import sme_headers, sme_url
 from sql_db import ops_store, settings_store
 
 router = APIRouter(prefix="/admin", tags=["admin"])
-
-HTTP_REQUESTS = Counter(
-    "kuber_http_requests_total",
-    "HTTP requests",
-    ["method", "path", "status"],
-)
-HTTP_LATENCY = Histogram(
-    "kuber_http_request_duration_seconds",
-    "HTTP request duration",
-    ["method", "path"],
-)
-LLM_ERRORS = Counter("kuber_llm_errors_total", "LLM call failures")
-
-
-class SettingsUpdate(BaseModel):
-    values: dict[str, str]
 
 
 @router.get("/settings")
@@ -36,8 +15,13 @@ async def get_settings(_user: dict = Depends(require_admin)):
 
 
 @router.put("/settings")
-async def put_settings(body: SettingsUpdate, _user: dict = Depends(require_admin)):
-    settings = await settings_store.save_settings(body.values)
+async def put_settings(body: dict, _user: dict = Depends(require_admin)):
+    values = body.get("values")
+    if not isinstance(values, dict):
+        raise HTTPException(status_code=400, detail="values required")
+    settings = await settings_store.save_settings(
+        {str(key): "" if value is None else str(value) for key, value in values.items()}
+    )
     asyncio.create_task(_notify_rust())
     await ops_store.add_log("info", "python", "admin updated settings")
     return {"settings": settings}
@@ -78,35 +62,6 @@ async def get_metrics_json(
     return ops_store.metrics_summary(minutes=minutes)
 
 
-def prometheus_response() -> Response:
-    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
-
-
-def observe_request(method: str, path: str, status: int, duration_s: float) -> None:
-    route = _normalize_path(path)
-    HTTP_REQUESTS.labels(method=method, path=route, status=str(status)).inc()
-    HTTP_LATENCY.labels(method=method, path=route).observe(duration_s)
-    ops_store.record_sample(route, method, status, duration_s * 1000, status >= 400)
-
-
-def record_llm_error() -> None:
-    LLM_ERRORS.inc()
-
-
-def _normalize_path(path: str) -> str:
-    if path.startswith("/chat"):
-        return "/chat"
-    if path.startswith("/news"):
-        return "/news"
-    if path.startswith("/credit"):
-        return "/credit"
-    if path.startswith("/admin"):
-        return "/admin"
-    if path.startswith("/auth"):
-        return "/auth"
-    return path.split("?")[0][:80]
-
-
 async def _notify_rust() -> None:
     try:
         import aiohttp
@@ -124,11 +79,3 @@ async def _notify_rust() -> None:
                 pass
     except Exception:
         pass
-
-
-def new_ids() -> tuple[str, str]:
-    return uuid.uuid4().hex[:16], uuid.uuid4().hex[:16]
-
-
-def utcnow() -> str:
-    return datetime.now(timezone.utc).isoformat()

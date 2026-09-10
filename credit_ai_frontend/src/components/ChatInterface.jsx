@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Send, AlertCircle, Trash2, ArrowDown, Loader2, LogOut, BarChart3 } from 'lucide-react'
+import { Send, AlertCircle, Trash2, ArrowDown, Loader2, LogOut, BarChart3, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { ChatTurn } from '@/components/ChatMessage'
 import { CompanyCharts } from '@/components/CompanyCharts'
+import { ComposerExtras } from '@/components/ComposerExtras'
+import { MemoComposer } from '@/components/MemoComposer'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { ThinkingPanel } from '@/components/ThinkingPanel'
 import { KuberLogo } from '@/components/KuberLogo'
@@ -19,8 +21,10 @@ import {
   getProgressForStage,
   stripStreamPrefix,
   hasDisplayableContent,
+  downloadChatMemo,
 } from '@/api/chat'
 import { formatChatIdLabel } from '@/lib/chatId'
+import { extraCinsText } from '@/lib/peerSelect'
 import { groupMessagesIntoTurns, createTurnMessages } from '@/lib/messages'
 import { saveChatSession, clearChatSession } from '@/lib/chatSessionStorage'
 import { debounce } from '@/lib/utils'
@@ -51,7 +55,7 @@ export function ChatInterface() {
   const ensureChatId = useAppStore((s) => s.ensureChatId)
   const resetChat = useAppStore((s) => s.resetChat)
   const completeChat = useAppStore((s) => s.completeChat)
-  const dismissRecovered = useAppStore((s) => s.dismissRecovered)
+  const selectCompany = useAppStore((s) => s.selectCompany)
 
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -60,6 +64,11 @@ export function ChatInterface() {
   const [error, setError] = useState(null)
   const [streamingMessageId, setStreamingMessageId] = useState(null)
   const [chartsOpen, setChartsOpen] = useState(false)
+  const [memoOpen, setMemoOpen] = useState(false)
+  const [memoLoading, setMemoLoading] = useState(false)
+  const [extraPeers, setExtraPeers] = useState([])
+  const [extraSearches, setExtraSearches] = useState('')
+  const [chatFiles, setChatFiles] = useState([])
   const [revealAnswer, setRevealAnswer] = useState(false)
   const [pendingTurnId, setPendingTurnId] = useState(null)
 
@@ -81,6 +90,11 @@ export function ChatInterface() {
 
   const cinList = selectedCompanies.map((c) => c.cin)
   const turns = useMemo(() => groupMessagesIntoTurns(messages), [messages])
+  const canDownloadMemo = Boolean(
+    activeChatId &&
+      !loading &&
+      messages.some((msg) => msg.role === 'assistant' && String(msg.content || '').trim())
+  )
 
   const persistSession = useCallback((overrides = {}) => {
     const snapshot = sessionRef.current
@@ -129,15 +143,23 @@ export function ChatInterface() {
     setError(null)
     setRevealAnswer(false)
     setPendingTurnId(null)
+    setMemoOpen(false)
+    setExtraPeers([])
+    setExtraSearches('')
+    setChatFiles([])
     enableAutoScroll()
   }, [sessionKey, enableAutoScroll])
 
   useEffect(() => () => abortRef.current?.abort(), [])
 
-  const runAnalysis = async (query, { hidePrompt = false } = {}) => {
+  const runAnalysis = async (query, { hidePrompt = false, extras } = {}) => {
     const companies = sessionRef.current.selectedCompanies
     const cins = companies.map((c) => c.cin)
     if (!query || cins.length === 0) return
+
+    const extraCins = extras?.extraCins ?? ''
+    const extraSearchText = extras?.extraSearches ?? ''
+    const files = extras?.files ?? []
 
     setError(null)
     setInput('')
@@ -206,6 +228,9 @@ export function ChatInterface() {
         cinList: cins,
         query,
         chatId,
+        extraCins,
+        extraSearches: extraSearchText,
+        files,
         signal: abortRef.current.signal,
         onStageChange: (stage) => {
           if (stage?.id && stage.id !== 'fetch') {
@@ -264,13 +289,27 @@ export function ChatInterface() {
   runAnalysisRef.current = runAnalysis
 
   const handleSend = async (text) => {
-    const query = (text ?? input).trim()
+    const typed = (text ?? input).trim()
+    const extras = {
+      extraCins: extraCinsText(extraPeers),
+      extraSearches,
+      files: chatFiles,
+    }
+    const hasExtras = Boolean(
+      extras.extraCins.trim() || extras.extraSearches.trim() || extras.files.length
+    )
+    const query = typed || (hasExtras
+      ? 'Use the extra peers, searches, and uploaded documents with this analysis.'
+      : '')
     if (!query || loading) return
     if (cinList.length === 0) {
       setError('Select at least one company first.')
       return
     }
-    await runAnalysis(query)
+    setExtraPeers([])
+    setExtraSearches('')
+    setChatFiles([])
+    await runAnalysis(query, { extras })
   }
 
   useEffect(() => {
@@ -328,18 +367,35 @@ export function ChatInterface() {
     navigate('/login', { replace: true })
   }
 
+  const handleDownloadMemo = async (format, options = {}) => {
+    if (!activeChatId || memoLoading) return
+    setMemoLoading(true)
+    setError(null)
+    try {
+      await downloadChatMemo(activeChatId, { format, ...options })
+      setMemoOpen(false)
+    } catch (err) {
+      setError(err?.message || 'Could not download the credit memo.')
+    } finally {
+      setMemoLoading(false)
+    }
+  }
+
   return (
     <main key={sessionKey} className="flex h-full min-w-0 flex-1 flex-col">
-      <header className="glass-panel flex h-12 shrink-0 items-center justify-between gap-2 border-b px-3 sm:px-5">
-        <div className="flex min-w-0 items-center gap-2">
+      <header className="glass-panel relative z-40 shrink-0 overflow-hidden border-b pt-[env(safe-area-inset-top)]">
+        <div className="flex h-12 items-center justify-between gap-2 px-2 sm:px-5">
+        <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
           <SidebarToggle />
-          <KuberLogo size={28} showWordmark className="min-w-0 [&>span]:hidden sm:[&>span]:inline" />
-          <p className="hidden text-[10px] text-muted-foreground md:block">Intelligence workspace</p>
+          <KuberLogo size={28} showWordmark className="min-w-0 [&_.kuber-wordmark]:hidden sm:[&_.kuber-wordmark]:inline" />
+          <p className="hidden text-[10px] uppercase tracking-[0.16em] text-muted-foreground md:block">
+            Credit workspace
+          </p>
         </div>
 
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex min-w-0 shrink-0 items-center gap-0.5 sm:gap-1">
           {activeChatId && (
-            <Badge variant="outline" className="h-5 px-1.5 font-mono text-[10px]">
+            <Badge variant="outline" className="hidden h-5 px-1.5 font-mono text-[10px] sm:inline-flex">
               {formatChatIdLabel(activeChatId)}
             </Badge>
           )}
@@ -368,6 +424,25 @@ export function ChatInterface() {
               <TooltipContent>Financial and credit charts</TooltipContent>
             </Tooltip>
           )}
+          {canDownloadMemo && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 px-2 text-xs"
+              disabled={memoLoading}
+              onClick={() => setMemoOpen(true)}
+            >
+              {memoLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Download className="h-3.5 w-3.5" />
+              )}
+              <span className="hidden sm:inline">
+                {memoLoading ? 'Memo…' : 'Memo'}
+              </span>
+            </Button>
+          )}
           {messages.length > 0 && (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -392,6 +467,7 @@ export function ChatInterface() {
             <TooltipContent>Sign out</TooltipContent>
           </Tooltip>
         </div>
+        </div>
       </header>
 
       <div className="relative min-h-0 flex-1">
@@ -399,6 +475,34 @@ export function ChatInterface() {
           companies={selectedCompanies}
           open={chartsOpen}
           onClose={() => setChartsOpen(false)}
+          onAddPeer={(company) => {
+            if (!company?.cin) return
+            selectCompany({
+              id: company.cin,
+              cin: company.cin,
+              legalName: company.legalName || company.name,
+              status: 'ACTIVE',
+              type: 'company',
+            })
+            setExtraPeers((current) => {
+              if (current.some((peer) => peer.cin === company.cin)) return current
+              return [
+                ...current,
+                {
+                  cin: company.cin,
+                  legalName: company.legalName || company.name,
+                  source: 'probe',
+                },
+              ]
+            })
+          }}
+        />
+        <MemoComposer
+          open={memoOpen}
+          loading={memoLoading}
+          selectedCompanies={selectedCompanies}
+          onClose={() => !memoLoading && setMemoOpen(false)}
+          onGenerate={handleDownloadMemo}
         />
         <div
           ref={scrollContainerRef}
@@ -434,11 +538,12 @@ export function ChatInterface() {
                 transition={{ duration: 0.4 }}
                 className="chat-content-width flex flex-col items-center px-1 py-10 text-center sm:py-16"
               >
-                <KuberLogo size={48} />
-                <h2 className="mt-4 text-lg font-semibold">Credit Intelligence</h2>
-                <p className="mt-1 max-w-md text-sm text-muted-foreground">
-                  Select a company to load data, then wait while per-company analysis runs. Use
-                  Show charts for graphs from filings, scores, peers, and legal data.
+                <KuberLogo size={40} className="sm:hidden" />
+                <KuberLogo size={48} className="hidden sm:block" />
+                <h2 className="font-display mt-5 text-[1.75rem] leading-tight sm:text-3xl">Name the borrower.</h2>
+                <p className="mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
+                  Search an Indian company in the sidebar. Kuber loads the filings and writes a
+                  first credit pass — then you can chart it, add peers, and download the memo.
                 </p>
 
                 {selectedCompanies.length > 0 && (
@@ -455,7 +560,7 @@ export function ChatInterface() {
                           transition={{ delay: 0.1 + i * 0.05 }}
                           type="button"
                           onClick={() => handleSend(prompt)}
-                          className="rounded-lg border border-border/40 bg-card/40 px-3 py-2.5 text-left text-sm transition-colors hover:border-primary/30 hover:bg-card/70"
+                          className="rounded-xl border border-border/50 bg-card/50 px-3 py-3 text-left text-sm transition-colors hover:border-foreground/20 hover:bg-card"
                         >
                           {prompt}
                         </motion.button>
@@ -542,38 +647,56 @@ export function ChatInterface() {
       </div>
 
       <div className="shrink-0 border-t border-border/40 px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-4 sm:py-4">
-        <div className="chat-content-width flex items-end gap-3">
-          <div className="flex flex-1 items-center gap-2 rounded-2xl border border-border/50 bg-card/40 px-4 py-2.5 shadow-sm backdrop-blur-sm transition-shadow focus-within:border-primary/30 focus-within:ring-1 focus-within:ring-primary/15">
-            <Input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  handleSend()
+        <div className="chat-content-width">
+          <div className="flex items-end gap-3">
+            <div className="flex flex-1 items-center gap-2 rounded-2xl border border-border/50 bg-card/40 px-4 py-2.5 shadow-sm backdrop-blur-sm transition-shadow focus-within:border-primary/30 focus-within:ring-1 focus-within:ring-primary/15">
+              <Input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    handleSend()
+                  }
+                }}
+                placeholder={
+                  cinList.length > 0
+                    ? 'Ask a follow-up about credit, financials, ratings...'
+                    : 'Select a company first'
                 }
-              }}
-              placeholder={
-                cinList.length > 0
-                  ? 'Ask a follow-up about credit, financials, ratings...'
-                  : 'Select a company first'
+                disabled={loading}
+                className="min-h-[24px] flex-1 border-0 bg-transparent px-0 text-base shadow-none focus-visible:ring-0 sm:text-[15px]"
+              />
+            </div>
+            <Button
+              size="icon"
+              className="h-10 w-10 shrink-0 rounded-xl"
+              onClick={() => handleSend()}
+              disabled={
+                loading ||
+                (!input.trim() &&
+                  extraPeers.length === 0 &&
+                  !extraSearches.trim() &&
+                  chatFiles.length === 0)
               }
-              disabled={loading}
-              className="min-h-[24px] flex-1 border-0 bg-transparent px-0 text-[15px] shadow-none focus-visible:ring-0"
-            />
+            >
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+            </Button>
           </div>
-          <Button
-            size="icon"
-            className="h-10 w-10 shrink-0 rounded-xl"
-            onClick={() => handleSend()}
-            disabled={loading || !input.trim()}
-          >
-            {loading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-          </Button>
+          <ComposerExtras
+            disabled={loading || cinList.length === 0}
+            extraPeers={extraPeers}
+            extraSearches={extraSearches}
+            files={chatFiles}
+            excludeCins={cinList}
+            onPeersChange={setExtraPeers}
+            onSearchesChange={setExtraSearches}
+            onFilesChange={setChatFiles}
+          />
         </div>
       </div>
     </main>

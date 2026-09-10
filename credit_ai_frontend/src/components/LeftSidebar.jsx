@@ -58,15 +58,15 @@ export function LeftSidebar() {
       <aside
         className={cn(
           'glass-panel flex h-full w-[min(18rem,88vw)] flex-col border-r bg-background',
-          'fixed inset-y-0 left-0 z-40 transition-transform duration-200 ease-out',
-          'lg:static lg:z-auto lg:w-72 lg:shrink-0 lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-40 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] transition-transform duration-200 ease-out',
+          'lg:static lg:z-auto lg:w-72 lg:shrink-0 lg:translate-x-0 lg:pt-0 lg:pb-0',
           mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
       >
         <div className="flex items-start justify-between border-b border-border/40 px-4 py-3">
           <div>
             <KuberLogo size={28} showWordmark />
-            <p className="mt-1 text-xs text-muted-foreground">Credit intelligence</p>
+            <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Credit workspace</p>
           </div>
           <Button
             type="button"

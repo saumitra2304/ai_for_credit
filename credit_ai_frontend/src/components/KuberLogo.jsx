@@ -1,38 +1,33 @@
 import { cn } from '@/lib/utils'
-import { useId } from 'react'
+
+export function KuberMark({ size = 32, className }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 48 48"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      aria-hidden="true"
+    >
+      <rect width="48" height="48" rx="12" fill="#161D28" />
+      <rect x="13.2" y="11" width="6.6" height="26" rx="1.15" fill="#F4EFE6" />
+      <path d="M22.3 11h14.2L27.8 23.3H22.3V11Z" fill="#F4EFE6" />
+      <path d="M22.3 25.5h6.2L37.4 37H31.4L22.3 25.5Z" fill="#F4EFE6" />
+      <circle cx="34.1" cy="21.4" r="4.55" fill="#C4A574" />
+      <circle cx="34.1" cy="21.4" r="3.15" fill="none" stroke="#EAD7A8" strokeWidth="0.55" />
+      <circle cx="34.1" cy="21.4" r="1.15" fill="#161D28" fillOpacity="0.28" />
+    </svg>
+  )
+}
 
 export function KuberLogo({ className, size = 32, showWordmark = false }) {
-  const gid = `kuber-${useId().replace(/:/g, '')}`
-
   return (
     <div className={cn('flex items-center gap-2.5', className)}>
-      <svg
-        width={size}
-        height={size}
-        viewBox="0 0 48 48"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        aria-hidden="true"
-      >
-        <rect width="48" height="48" rx="12" fill={`url(#${gid})`} />
-        <path
-          d="M15 33V15h4.5l8.2 11.8V15H32v18h-4.4L19.4 21.2V33H15z"
-          fill="white"
-        />
-        <path
-          d="M28 33V23l6-8h5l-7.5 10.2V33H28z"
-          fill="#A7F3D0"
-        />
-        <circle cx="36" cy="14" r="3.5" fill="#34D399" />
-        <defs>
-          <linearGradient id={gid} x1="4" y1="4" x2="44" y2="44">
-            <stop stopColor="#2563EB" />
-            <stop offset="1" stopColor="#059669" />
-          </linearGradient>
-        </defs>
-      </svg>
+      <KuberMark size={size} />
       {showWordmark && (
-        <span className="truncate text-base font-semibold tracking-tight text-foreground">
+        <span className="kuber-wordmark font-display truncate text-[1.2rem] leading-none tracking-tight text-foreground sm:text-[1.35rem]">
           Kuber
         </span>
       )}

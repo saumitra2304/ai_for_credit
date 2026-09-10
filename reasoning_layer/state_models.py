@@ -1,9 +1,11 @@
-from typing import List
-from pydantic import BaseModel
+from types import SimpleNamespace
 
-class chat_memory(BaseModel):
-    user_id: int
-    chat_id: str | int
-    sme_data: dict
-    message_trail: List[dict]
-    company_cache: dict = {}
+
+def chat_memory(*, user_id, chat_id, sme_data, message_trail, company_cache=None):
+    return SimpleNamespace(
+        user_id=user_id,
+        chat_id=str(chat_id),
+        sme_data=sme_data if isinstance(sme_data, dict) else {},
+        message_trail=list(message_trail or []),
+        company_cache=company_cache if isinstance(company_cache, dict) else {},
+    )

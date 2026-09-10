@@ -37,8 +37,16 @@ export async function searchCompanies(query, limit = 25) {
     bid: l.bid,
   }))
 
+  const seen = new Set()
+  const results = []
+  for (const company of [...companies, ...llps]) {
+    if (!company.id || seen.has(company.id)) continue
+    seen.add(company.id)
+    results.push(company)
+  }
+
   return {
-    results: [...companies, ...llps],
+    results,
     totalCount: json?.data?.total_count ?? 0,
     hasMore: json?.data?.has_more ?? false,
   }

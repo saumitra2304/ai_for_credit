@@ -1,10 +1,9 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
+import { AuthShell } from '@/components/AuthShell'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { KuberLogo } from '@/components/KuberLogo'
-import { ThemeToggle } from '@/components/ThemeToggle'
 import { useAuthStore } from '@/store/useAuthStore'
 
 export function RegisterPage() {
@@ -48,109 +47,99 @@ export function RegisterPage() {
   const shownError = formError || error
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4">
-      <div className="mesh-bg pointer-events-none absolute inset-0" />
-      <div className="absolute right-4 top-4 z-10">
-        <ThemeToggle className="h-8 w-8" />
-      </div>
-      <div className="glass-panel relative w-full max-w-md rounded-2xl border p-8 shadow-xl">
-        <div className="mb-8 flex flex-col items-center text-center">
-          <Link to="/" aria-label="Back to home">
-            <KuberLogo size={44} showWordmark />
-          </Link>
-          <p className="mt-2 text-sm text-muted-foreground">Create your Kuber account</p>
+    <AuthShell
+      title="Open a desk."
+      subtitle="Create an account, pick a CIN, and run the first credit pass."
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-1.5">
+          <label htmlFor="displayName" className="text-xs font-medium text-muted-foreground">
+            Display name
+          </label>
+          <Input
+            id="displayName"
+            type="text"
+            autoComplete="name"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            placeholder="Jane Doe"
+            required
+          />
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <label htmlFor="displayName" className="text-xs font-medium text-muted-foreground">
-              Display name
-            </label>
-            <Input
-              id="displayName"
-              type="text"
-              autoComplete="name"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="Jane Doe"
-              required
-            />
-          </div>
+        <div className="space-y-1.5">
+          <label htmlFor="email" className="text-xs font-medium text-muted-foreground">
+            Email
+          </label>
+          <Input
+            id="email"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@company.com"
+            required
+          />
+        </div>
 
-          <div className="space-y-1.5">
-            <label htmlFor="email" className="text-xs font-medium text-muted-foreground">
-              Email
-            </label>
-            <Input
-              id="email"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@company.com"
-              required
-            />
-          </div>
+        <div className="space-y-1.5">
+          <label htmlFor="password" className="text-xs font-medium text-muted-foreground">
+            Password
+          </label>
+          <Input
+            id="password"
+            type="password"
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="At least 8 characters"
+            minLength={8}
+            maxLength={128}
+            required
+          />
+        </div>
 
-          <div className="space-y-1.5">
-            <label htmlFor="password" className="text-xs font-medium text-muted-foreground">
-              Password
-            </label>
-            <Input
-              id="password"
-              type="password"
-              autoComplete="new-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="At least 8 characters"
-              minLength={8}
-              maxLength={128}
-              required
-            />
-          </div>
+        <div className="space-y-1.5">
+          <label htmlFor="confirmPassword" className="text-xs font-medium text-muted-foreground">
+            Confirm password
+          </label>
+          <Input
+            id="confirmPassword"
+            type="password"
+            autoComplete="new-password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="Type the same password again"
+            minLength={8}
+            maxLength={128}
+            required
+          />
+        </div>
 
-          <div className="space-y-1.5">
-            <label htmlFor="confirmPassword" className="text-xs font-medium text-muted-foreground">
-              Confirm password
-            </label>
-            <Input
-              id="confirmPassword"
-              type="password"
-              autoComplete="new-password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Type the same password again"
-              minLength={8}
-              maxLength={128}
-              required
-            />
-          </div>
+        {shownError && (
+          <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+            {shownError}
+          </p>
+        )}
 
-          {shownError && (
-            <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-              {shownError}
-            </p>
+        <Button type="submit" className="h-10 w-full rounded-full" disabled={submitting}>
+          {submitting ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Creating account...
+            </>
+          ) : (
+            'Create account'
           )}
+        </Button>
+      </form>
 
-          <Button type="submit" className="w-full" disabled={submitting}>
-            {submitting ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Creating account...
-              </>
-            ) : (
-              'Create account'
-            )}
-          </Button>
-        </form>
-
-        <p className="mt-6 text-center text-sm text-muted-foreground">
-          Already have an account?{' '}
-          <Link to="/login" className="font-medium text-primary hover:underline">
-            Sign in
-          </Link>
-        </p>
-      </div>
-    </div>
+      <p className="mt-6 text-sm text-muted-foreground">
+        Already have an account?{' '}
+        <Link to="/login" className="font-medium text-foreground underline-offset-4 hover:underline">
+          Sign in
+        </Link>
+      </p>
+    </AuthShell>
   )
 }

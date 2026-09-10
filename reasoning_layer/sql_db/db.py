@@ -208,7 +208,9 @@ async def open_db() -> aiosqlite.Connection:
         await conn.execute("PRAGMA busy_timeout = 8000")
         await conn.execute("PRAGMA synchronous = NORMAL")
         await conn.execute("PRAGMA temp_store = MEMORY")
-        await conn.execute("PRAGMA cache_size = -8000")
+        await conn.execute("PRAGMA cache_size = -16000")
+        await conn.execute("PRAGMA mmap_size = 268435456")
+        await conn.execute("PRAGMA wal_autocheckpoint = 1000")
         _shared = conn
         _wrapper = _SharedConnection(conn)
         return _wrapper

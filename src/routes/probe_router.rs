@@ -6,15 +6,61 @@ use axum::{
     http::HeaderMap,
     Json,
 };
-use reqwest::Url;
+use reqwest::{Client, Url};
 use serde::Deserialize;
 use serde_json::Value;
-use std::time::Instant;
+use std::time::{Duration, Instant};
+use tokio::time::sleep;
 
 #[derive(Deserialize)]
 pub struct params {
     limit: i32,
     filters: String,
+}
+
+async fn probe_get_json<T: serde::de::DeserializeOwned>(
+    client: &Client,
+    url: String,
+    api_key: &str,
+    metrics: &crate::ops::SmeMetrics,
+) -> Result<T, String> {
+    let mut last = String::from("probe request failed");
+    for attempt in 0..3 {
+        let response = client
+            .get(&url)
+            .header("x-api-key", api_key)
+            .header("Accept", "application/json")
+            .header("x-api-version", "1.3")
+            .send()
+            .await;
+        match response {
+            Ok(resp) => {
+                let status = resp.status();
+                if status.is_success() {
+                    return resp
+                        .json()
+                        .await
+                        .map_err(|err| format!("error getting from probe42 {err}"));
+                }
+                last = format!("probe HTTP {status}");
+                if status.is_server_error() && attempt < 2 {
+                    metrics.inc_retry();
+                    sleep(Duration::from_millis(250 * (attempt as u64 + 1))).await;
+                    continue;
+                }
+                return Err(last);
+            }
+            Err(err) => {
+                last = format!("error sending to probe42 {err}");
+                if attempt < 2 {
+                    metrics.inc_retry();
+                    sleep(Duration::from_millis(250 * (attempt as u64 + 1))).await;
+                    continue;
+                }
+            }
+        }
+    }
+    Err(last)
 }
 
 pub async fn probe_search(
@@ -24,7 +70,7 @@ pub async fn probe_search(
 ) -> Result<Json<search_results_probe>, String> {
     let start = Instant::now();
     let start_ts = utc_now();
-    let api_key = app_state.probe_key_value();
+    let api_key = crate::probe_key_value(&app_state);
     let client = app_state.reqwest_client.clone();
 
     let limit = search_paramas.limit;
@@ -38,25 +84,23 @@ pub async fn probe_search(
 
     println!("sending probe request: {}", url);
 
-    let result = async {
-        let response = client
-            .get(url)
-            .header("x-api-key", api_key)
-            .header("Accept", "application/json")
-            .header("x-api-version", "1.3")
-            .send()
-            .await
-            .map_err(|e| format!("error sending to probe42 {e}"))?;
-
-        println!("status: {}", response.status());
-
-        let resp: search_results_probe = response
-            .json()
-            .await
-            .map_err(|e| format!("error getting from probe42 {e}"))?;
-        Ok(Json(resp))
-    }
-    .await;
+    let permit = app_state
+        .probe_limit
+        .clone()
+        .acquire_owned()
+        .await
+        .map_err(|err| format!("probe limiter: {err}"))?;
+    app_state.metrics.inc_in_flight();
+    let result = probe_get_json::<search_results_probe>(
+        &client,
+        url.to_string(),
+        &api_key,
+        &app_state.metrics,
+    )
+    .await
+    .map(Json);
+    app_state.metrics.dec_in_flight();
+    drop(permit);
 
     finish_call(
         app_state.sqlite_path.clone(),
@@ -83,28 +127,25 @@ pub async fn company_comprehensive_details(
 ) -> Result<Json<Value>, String> {
     let start = Instant::now();
     let start_ts = utc_now();
-    let api_key = app_state.probe_key_value();
+    let api_key = crate::probe_key_value(&app_state);
     let client = app_state.reqwest_client.clone();
 
     let cin = params.cin;
     let url =
         format!("https://api.probe42.in/probe_pro_sandbox/companies/{cin}/comprehensive-details");
 
-    let result = async {
-        let resp: Value = client
-            .get(url)
-            .header("x-api-key", api_key)
-            .header("Accept", "application/json")
-            .header("x-api-version", "1.3")
-            .send()
-            .await
-            .map_err(|e| format!("error sending to probe42 {e}"))?
-            .json()
-            .await
-            .map_err(|e| format!("error unmarshaling comp details {e}"))?;
-        Ok(Json(resp))
-    }
-    .await;
+    let permit = app_state
+        .probe_limit
+        .clone()
+        .acquire_owned()
+        .await
+        .map_err(|err| format!("probe limiter: {err}"))?;
+    app_state.metrics.inc_in_flight();
+    let result = probe_get_json::<Value>(&client, url, &api_key, &app_state.metrics)
+        .await
+        .map(Json);
+    app_state.metrics.dec_in_flight();
+    drop(permit);
 
     finish_call(
         app_state.sqlite_path.clone(),

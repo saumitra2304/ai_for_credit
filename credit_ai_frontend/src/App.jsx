@@ -16,7 +16,7 @@ function MainApp() {
   useHydrateSession()
 
   return (
-    <div className="relative flex h-screen overflow-hidden">
+    <div className="relative flex h-dvh overflow-hidden">
       <div className="mesh-bg pointer-events-none absolute inset-0" />
       <div className="relative flex h-full w-full min-w-0">
         <LeftSidebar />
@@ -51,7 +51,7 @@ function ProtectedRoute({ children }) {
 
   if (status === 'idle' || status === 'loading') {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-dvh items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
       </div>
     )
@@ -70,7 +70,7 @@ function AdminRoute({ children }) {
 
   if (status === 'idle' || status === 'loading') {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-dvh items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
       </div>
     )
@@ -92,7 +92,7 @@ function GuestRoute({ children }) {
 
   if (status === 'idle' || status === 'loading') {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-dvh items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
       </div>
     )
@@ -107,7 +107,7 @@ function GuestRoute({ children }) {
 
 function AdminApp() {
   return (
-    <div className="relative flex h-screen overflow-hidden">
+    <div className="relative flex h-dvh overflow-hidden">
       <div className="mesh-bg pointer-events-none absolute inset-0" />
       <div className="relative flex h-full w-full min-w-0">
         <LeftSidebar />

@@ -5,18 +5,50 @@ import remarkGfm from 'remark-gfm'
 import { Bot, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatChatMarkdown } from '@/lib/formatChatMarkdown'
+import { calloutTone, cellTone, headingTone } from '@/lib/markdownTone'
+
+function Heading({ as: Tag, baseClass, children }) {
+  const tone = headingTone(children)
+  return (
+    <Tag className={cn(baseClass, tone && `markdown-h-${tone}`)}>
+      {children}
+    </Tag>
+  )
+}
 
 const markdownComponents = {
-  h1: ({ children }) => <h1 className="markdown-h1">{children}</h1>,
-  h2: ({ children }) => <h2 className="markdown-h2">{children}</h2>,
-  h3: ({ children }) => <h3 className="markdown-h3">{children}</h3>,
-  h4: ({ children }) => <h4 className="markdown-h4">{children}</h4>,
+  h1: ({ children }) => (
+    <Heading as="h1" baseClass="markdown-h1">
+      {children}
+    </Heading>
+  ),
+  h2: ({ children }) => (
+    <Heading as="h2" baseClass="markdown-h2">
+      {children}
+    </Heading>
+  ),
+  h3: ({ children }) => (
+    <Heading as="h3" baseClass="markdown-h3">
+      {children}
+    </Heading>
+  ),
+  h4: ({ children }) => (
+    <Heading as="h4" baseClass="markdown-h4">
+      {children}
+    </Heading>
+  ),
   p: ({ children }) => <p className="markdown-p">{children}</p>,
   ul: ({ children }) => <ul className="markdown-ul">{children}</ul>,
   ol: ({ children }) => <ol className="markdown-ol">{children}</ol>,
   li: ({ children }) => <li className="markdown-li">{children}</li>,
   hr: () => <hr className="markdown-hr" />,
-  strong: ({ children }) => <strong className="markdown-strong">{children}</strong>,
+  strong: ({ children }) => {
+    const tone = calloutTone(children)
+    if (tone) {
+      return <strong className={cn('markdown-callout', `markdown-callout-${tone}`)}>{children}</strong>
+    }
+    return <strong className="markdown-strong">{children}</strong>
+  },
   em: ({ children }) => <em className="markdown-em">{children}</em>,
   blockquote: ({ children }) => <blockquote className="markdown-quote">{children}</blockquote>,
   a: ({ href, children }) => (
@@ -41,11 +73,17 @@ const markdownComponents = {
   tbody: ({ children }) => <tbody>{children}</tbody>,
   tr: ({ children }) => <tr>{children}</tr>,
   th: ({ children }) => <th>{children}</th>,
-  td: ({ children, style }) => (
-    <td style={style} className="markdown-td">
-      {children}
-    </td>
-  ),
+  td: ({ children, style }) => {
+    const tone = cellTone(children)
+    return (
+      <td
+        style={style}
+        className={cn('markdown-td', tone === 'neg' && 'markdown-td-neg', tone === 'muted' && 'markdown-td-muted')}
+      >
+        {children}
+      </td>
+    )
+  },
 }
 
 export const ChatMessage = memo(function ChatMessage({ role, content, isStreaming }) {
@@ -75,7 +113,7 @@ export const ChatMessage = memo(function ChatMessage({ role, content, isStreamin
 
         <div className="min-w-0 flex-1 pt-0.5">
           <p className="mb-2 text-xs font-medium text-muted-foreground">
-            {isUser ? 'You' : 'Kuber AI'}
+            {isUser ? 'You' : 'Kuber'}
           </p>
           <div className="markdown-body text-[15px] leading-relaxed text-foreground/95">
             {isUser ? (

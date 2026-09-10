@@ -31,7 +31,7 @@ sme-api &
 
 echo "starting reasoning layer on :8001"
 cd /app/reasoning_layer
-uvicorn main:app --host 127.0.0.1 --port 8001 --workers 1 --timeout-keep-alive 75 &
+uvicorn main:app --host 127.0.0.1 --port 8001 --workers 1 --timeout-keep-alive 75 --limit-concurrency 64 &
 
 echo "starting nginx ($(basename "$TEMPLATE"))"
 exec nginx -g "daemon off;"

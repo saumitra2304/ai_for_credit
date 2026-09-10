@@ -115,7 +115,8 @@ FOLLOWUP_INSTRUCTION = (
     "Standalone filings are tables only. They do not contain news, corporate "
     "actions, board or management changes, or annual-report commentary.\n"
     "Use web search for recent news or public facts. Summarise what you find "
-    "and cite title, source, and date. Do not invent headlines."
+    "and cite title, source, and date. Do not invent headlines.\n"
+    "Do not open with the company name or CIN."
 )
 
 
@@ -146,7 +147,65 @@ ANALYSIS_INSTRUCTION = (
     "6. RISK CONCLUSION\n"
     "   A short verdict with the two or three factors that drive it.\n\n"
     "If several companies are in the packet, cover each, then a short "
-    "comparison. Analyse whatever is provided. Do not restate the raw input."
+    "comparison. Analyse whatever is provided. Do not restate the raw input.\n\n"
+    "Do not open with the legal name, the CIN, or a "
+    "'Company (Standalone) — Credit Assessment (FY…)' banner. The desk "
+    "already knows the borrower. Start at FINANCIAL SUMMARY TABLES. Use "
+    "normal section headings, not all caps."
+)
+
+
+MEMO_INSTRUCTION = (
+    "You are writing a credit-committee memo for Indian corporates.\n"
+    "This is a fresh underwriting document, not a chat reply and not a "
+    "summary of a prior assistant message. Do not mention the chat, "
+    "follow-up questions, or that you are an AI.\n\n"
+    "Use every block in the company packet: identity and capital/charges, "
+    "P&L, balance sheet, cash flow, ratios, Probe scores, peers and "
+    "industry medians, related-party amounts, shareholders above 5%, "
+    "credit ratings and rationale, legal/NCLT/DRT cases, MSME delays, "
+    "and governance where it affects credit. Convert rupees to crore "
+    "(1 crore = 10 million) or lakh, with Indian grouping "
+    "(e.g. Rs 1,234.5 crore). Never write raw millions or ungrouped "
+    "8-digit rupee amounts. Do not invent figures. If a line is absent, "
+    "say it is not in the filings.\n\n"
+    "You MUST call web_search before writing the news section. Run "
+    "separate searches for each company covering:\n"
+    "- latest ICRA / CRISIL / CARE / India Ratings action\n"
+    "- NCLT, CIRP, default, SMA, or DRT developments\n"
+    "- promoter or group stress, pledges, or SEBI/MCA actions\n"
+    "- material business news in the last 12-18 months "
+    "(order book, refinancing, stake sale, project delays)\n"
+    "Cite title, publisher, and date. If a search is empty, say so once. "
+    "Do not invent headlines.\n\n"
+    "Charts for revenue/PAT, equity vs debt, cash flow, margins, and "
+    "peers will be attached after your text. Refer to them in prose; "
+    "do not draw ASCII charts.\n\n"
+    "Structure:\n"
+    "1. Cover — legal name, CIN, incorporation, one-line recommendation "
+    "(advance / caution / decline) and the assignment if one is given.\n"
+    "2. Executive summary — 8 to 12 lines covering scale, leverage, "
+    "cash conversion, ratings, legal, and the recommendation.\n"
+    "3. Financial position — markdown tables with years as columns for "
+    "P&L, balance sheet, cash flow, and key ratios. Then trend commentary "
+    "on growth, margins, liquidity, solvency, and working-capital days.\n"
+    "4. Peer and industry comparison — scale vs named peers; margins/ROE "
+    "vs industry medians when the packet has them.\n"
+    "5. Capital structure, charges, related parties, and shareholding.\n"
+    "6. Credit ratings, legal, and MSME — rating migration, material "
+    "pending cases, supplier delays.\n"
+    "7. News and market context — only from web search, cited.\n"
+    "8. Strengths and red flags — bullets, each tied to a figure or source.\n"
+    "9. Recommendation and conditions — facility view if the officer named one, "
+    "security/monitoring, and what to obtain next.\n"
+    "10. Macro and sector outlook — only from web search the officer asked for "
+    "(policy, demand, rates, input costs, regulation). Cite and date. "
+    "Do not invent a house view.\n"
+    "11. User documents and chat — if the packet includes CMA, sanction notes, "
+    "Excel, Word, or the live chat, use them as evidence. Quote figures from "
+    "those files; do not invent rows that are not there.\n"
+    "If extra peer companies are in the packet with filings, treat them as "
+    "full comparables (scale, margins, leverage, WC), not name-only.\n"
 )
 
 
@@ -457,7 +516,7 @@ async def chat_endpoint_stream(query, company_information_list, chat_history, is
     except Exception as exc:
         _log(f"[llm error {type(exc).__name__}: {exc}]")
         try:
-            from admin_routes import record_llm_error
+            from observability import record_llm_error
             from request_ctx import log_event
 
             record_llm_error()

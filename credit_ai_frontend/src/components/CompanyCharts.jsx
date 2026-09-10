@@ -102,7 +102,7 @@ const valueAxis = {
   tickFormatter: (v) => formatGroupedNumber(v, 1),
 }
 
-export function CompanyCharts({ companies, open, onClose }) {
+export function CompanyCharts({ companies, open, onClose, onAddPeer }) {
   const [cin, setCin] = useState(companies[0]?.cin ?? '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -137,7 +137,7 @@ export function CompanyCharts({ companies, open, onClose }) {
   if (!open) return null
 
   return (
-    <div className="absolute inset-0 z-20 flex flex-col bg-background/95 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex flex-col bg-background/95 pt-[env(safe-area-inset-top)] backdrop-blur-sm lg:absolute lg:pt-0">
       <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b px-3 sm:px-4">
         <div className="flex min-w-0 items-center gap-2">
           <BarChart3 className="h-4 w-4 text-primary" />
@@ -368,7 +368,8 @@ export function CompanyCharts({ companies, open, onClose }) {
             </TabsContent>
             <TabsContent value="peers" className="p-3 sm:p-4">
               <div className="grid gap-4 md:grid-cols-2">
-                <ChartCard title="Peer revenue" description="₹ crore" empty={!charts.peers.length}>
+                <div>
+                <ChartCard title="Peer revenue" description="₹ crore · same source used to auto-pick memo comps" empty={!charts.peers.length}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={charts.peers} layout="vertical" margin={{ left: 16 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.7} />
@@ -379,6 +380,36 @@ export function CompanyCharts({ companies, open, onClose }) {
                     </BarChart>
                   </ResponsiveContainer>
                 </ChartCard>
+                  {onAddPeer && charts.peers.some((peer) => peer.cin && peer.cin !== cin) && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {charts.peers
+                        .filter((peer) => peer.cin && peer.cin !== cin)
+                        .slice(0, 5)
+                        .map((peer) => {
+                          const already = companies.some((company) => company.cin === peer.cin)
+                          return (
+                            <Button
+                              key={peer.cin}
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 max-w-full px-2 text-[10px]"
+                              disabled={already}
+                              onClick={() =>
+                                onAddPeer({
+                                  cin: peer.cin,
+                                  legalName: peer.legalName || peer.name,
+                                  name: peer.name,
+                                })
+                              }
+                            >
+                              {already ? 'In chat' : `Add ${peer.name}`}
+                            </Button>
+                          )
+                        })}
+                    </div>
+                  )}
+                </div>
                 <ChartCard title="Vs industry median" empty={!charts.peerBench.length}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={charts.peerBench}>

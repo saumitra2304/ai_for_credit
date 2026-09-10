@@ -10,7 +10,9 @@ use reqwest::Client;
 use std::env;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::net::TcpListener;
+use tokio::sync::Semaphore;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
 mod ops;
@@ -28,22 +30,21 @@ pub struct AppState {
     pub internal_token: String,
     pub sqlite_path: PathBuf,
     pub metrics: Arc<SmeMetrics>,
+    pub probe_limit: Arc<Semaphore>,
 }
 
-impl AppState {
-    pub fn probe_key_value(&self) -> String {
-        let mut probe = self.probe_key.clone();
-        let mut insta = self.api_key.clone();
-        ops::overlay_keys(&self.sqlite_path, &mut probe, &mut insta);
-        probe
-    }
+pub fn probe_key_value(state: &AppState) -> String {
+    let mut probe = state.probe_key.clone();
+    let mut insta = state.api_key.clone();
+    ops::overlay_keys(&state.sqlite_path, &mut probe, &mut insta);
+    probe
+}
 
-    pub fn api_key_value(&self) -> String {
-        let mut probe = self.probe_key.clone();
-        let mut insta = self.api_key.clone();
-        ops::overlay_keys(&self.sqlite_path, &mut probe, &mut insta);
-        insta
-    }
+pub fn api_key_value(state: &AppState) -> String {
+    let mut probe = state.probe_key.clone();
+    let mut insta = state.api_key.clone();
+    ops::overlay_keys(&state.sqlite_path, &mut probe, &mut insta);
+    insta
 }
 
 pub fn load_env_files() {
@@ -57,11 +58,24 @@ pub fn load_env_files() {
 pub fn load_state() -> AppState {
     load_env_files();
 
+    let probe_limit = env::var("PROBE_UPSTREAM_CONCURRENCY")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(20)
+        .clamp(1, 64);
+
+    let reqwest_client = Client::builder()
+        .pool_max_idle_per_host(16)
+        .timeout(Duration::from_secs(60))
+        .connect_timeout(Duration::from_secs(10))
+        .build()
+        .unwrap_or_else(|_| Client::new());
+
     AppState {
         api_key: env::var("INSTA_API_KEY")
             .or_else(|_| env::var("insta_api_key"))
             .unwrap_or_default(),
-        reqwest_client: Client::new(),
+        reqwest_client,
         probe_key: env::var("probe_api_key").unwrap_or_else(|_| {
             eprintln!("probe_api_key is not set; company search will fail until it is in .env");
             String::new()
@@ -69,6 +83,7 @@ pub fn load_state() -> AppState {
         internal_token: env::var("INTERNAL_TOKEN").unwrap_or_default(),
         sqlite_path: crate::ops::sqlite_path(),
         metrics: Arc::new(SmeMetrics::default()),
+        probe_limit: Arc::new(Semaphore::new(probe_limit)),
     }
 }
 
@@ -84,6 +99,7 @@ pub fn router(state: AppState) -> Router {
             get(company_comprehensive_details),
         )
         .route("/internal/reload-settings", post(reload_settings))
+        .route("/internal/metrics", get(internal_metrics))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             internal_token_middleware,
@@ -143,11 +159,21 @@ async fn reload_settings() -> &'static str {
     "ok"
 }
 
+async fn internal_metrics(State(state): State<AppState>) -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/plain; version=0.0.4; charset=utf-8")],
+        state.metrics.render(),
+    )
+}
+
 async fn internal_token_middleware(
     State(state): State<AppState>,
     request: axum::http::Request<axum::body::Body>,
     next: Next,
 ) -> Response {
+    if request.uri().path() == "/internal/metrics" {
+        return next.run(request).await;
+    }
     if state.internal_token.is_empty() || request.method() == Method::OPTIONS {
         return next.run(request).await;
     }

@@ -44,9 +44,43 @@ function formatProse(text) {
   return formatBareIntegers(formatScaledAmounts(sanitized))
 }
 
+function isOpeningBanner(line) {
+  const heading = /^(#{1,6})\s+/.test(line)
+  const text = line.replace(/^#{1,6}\s+/, '').replace(/\*\*/g, '').trim()
+  if (!text) return false
+  if (/credit assessment/i.test(text)) return true
+  if (/\(standalone\)/i.test(text) && /FY\s*\d{4}/i.test(text)) return true
+  if (/\(CIN\s+[A-Z0-9]+\)/i.test(text)) {
+    if (heading) return true
+    return text.length < 140 && !/[.?!]/.test(text)
+  }
+  return false
+}
+
+function stripOpeningBanners(text) {
+  const lines = text.split('\n')
+  let i = 0
+  while (i < lines.length && !lines[i].trim()) i += 1
+  let stripped = false
+  while (i < lines.length) {
+    const line = lines[i]
+    if (!line.trim()) {
+      i += 1
+      continue
+    }
+    if (!isOpeningBanner(line)) break
+    stripped = true
+    i += 1
+  }
+  if (!stripped) return text
+  while (i < lines.length && !lines[i].trim()) i += 1
+  return lines.slice(i).join('\n')
+}
+
 export function formatChatMarkdown(text) {
   if (!text) return text
-  return text
+  const cleaned = stripOpeningBanners(text)
+  return cleaned
     .split(/(```[\s\S]*?```|`[^`]+`)/g)
     .map((part) => (part.startsWith('`') ? part : formatProse(part)))
     .join('')

@@ -62,4 +62,22 @@ describe('formatChatMarkdown', () => {
   it('does not rewrite inline code', () => {
     expect(formatChatMarkdown('use `1234567890` as id')).toBe('use `1234567890` as id')
   })
+
+  it('drops stacked company banners at the start of a read', () => {
+    const source = [
+      '## GODREJ PROPERTIES LIMITED (CIN L74120MH1985PLC035308)',
+      '',
+      'GODREJ PROPERTIES LIMITED (Standalone) — Credit Assessment (FY2023–FY2025)',
+      '',
+      '## Financial summary',
+      '',
+      'Revenue held up.',
+    ].join('\n')
+    expect(formatChatMarkdown(source)).toBe('## Financial summary\n\nRevenue held up.')
+  })
+
+  it('keeps a CIN mention that is not an opening banner', () => {
+    const source = 'Working capital at Godrej (CIN L74120MH1985PLC035308) stretched.'
+    expect(formatChatMarkdown(source)).toBe(source)
+  })
 })

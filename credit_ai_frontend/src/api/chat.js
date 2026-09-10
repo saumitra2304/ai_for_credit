@@ -17,21 +17,38 @@ export async function streamChatMessage({
   query,
   chatId = null,
   stream = true,
+  extraCins = '',
+  extraSearches = '',
+  files = [],
   onChunk,
   onStageChange,
   signal,
 }) {
+  const hasExtras =
+    String(extraCins || '').trim() ||
+    String(extraSearches || '').trim() ||
+    (files && files.length > 0)
   const response = await authFetch(CHAT_BASE, {
     method: 'POST',
     headers: {
       Accept: 'text/plain',
     },
-    body: JSON.stringify({
-      cin_list: cinList,
-      query,
-      chat_id: chatId,
-      stream,
-    }),
+    body: hasExtras
+      ? buildChatForm({
+          cinList,
+          query,
+          chatId,
+          stream,
+          extraCins,
+          extraSearches,
+          files,
+        })
+      : JSON.stringify({
+          cin_list: cinList,
+          query,
+          chat_id: chatId,
+          stream,
+        }),
     signal,
   })
 
@@ -172,4 +189,95 @@ export function createProgressSimulator(onProgress, onStageChange, initialStage)
       clearInterval(tick)
     },
   }
+}
+
+export function filenameFromDisposition(header, fallback) {
+  const match = String(header || '').match(/filename\*?=(?:UTF-8''|"?)([^";]+)"?/i)
+  if (!match) return fallback
+  try {
+    return decodeURIComponent(match[1])
+  } catch {
+    return match[1]
+  }
+}
+
+export function buildMemoForm({
+  format = 'pdf',
+  notes = '',
+  extraCins = '',
+  extraSearches = '',
+  includeChat = true,
+  autoPeers = true,
+  files = [],
+} = {}) {
+  const form = new FormData()
+  form.append('format', format)
+  form.append('notes', notes)
+  form.append('extra_cins', extraCins)
+  form.append('extra_searches', extraSearches)
+  form.append('include_chat', includeChat ? 'true' : 'false')
+  form.append('auto_peers', autoPeers ? 'true' : 'false')
+  for (const file of files) {
+    if (file) form.append('files', file)
+  }
+  return form
+}
+
+export function buildChatForm({
+  cinList = [],
+  query = '',
+  chatId = '',
+  stream = true,
+  extraCins = '',
+  extraSearches = '',
+  files = [],
+} = {}) {
+  const form = new FormData()
+  form.append('cin_list', JSON.stringify(cinList))
+  form.append('query', query)
+  form.append('chat_id', String(chatId ?? ''))
+  form.append('stream', stream ? 'true' : 'false')
+  form.append('extra_cins', extraCins)
+  form.append('extra_searches', extraSearches)
+  for (const file of files) {
+    if (file) form.append('files', file)
+  }
+  return form
+}
+
+export async function downloadChatMemo(chatId, options = {}) {
+  const format = typeof options === 'string' ? options : options.format || 'pdf'
+  const payload = typeof options === 'string' ? { format } : { ...options, format }
+  const response = await authFetch(
+    `${CHAT_BASE}/${encodeURIComponent(chatId)}/memo?format=${encodeURIComponent(format)}`,
+    { method: 'POST', body: buildMemoForm(payload) }
+  )
+
+  if (!response.ok) {
+    const text = await response.text()
+    let message = text || `Memo download failed: ${response.statusText}`
+    try {
+      const json = JSON.parse(text)
+      const detail = json.detail ?? json.message
+      if (typeof detail === 'string' && detail.trim()) message = detail
+    } catch {
+      // keep raw text
+    }
+    throw new Error(message)
+  }
+
+  const blob = await response.blob()
+  const filename = filenameFromDisposition(
+    response.headers.get('content-disposition'),
+    `credit-memo.${format}`
+  )
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+  return filename
 }

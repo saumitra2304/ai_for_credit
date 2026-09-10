@@ -11,6 +11,8 @@ reasoning_layer/build/
 # Secrets and local data
 .env
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite3
 deploy/certs/

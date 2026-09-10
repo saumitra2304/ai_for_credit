@@ -14,6 +14,10 @@ services:
       CORS_ORIGIN_REGEX: ${CORS_ORIGIN_REGEX:-https://.*\\.vercel\\.app}
       DOMAIN: ${DOMAIN:-_}
       INTERNAL_TOKEN: ${INTERNAL_TOKEN:-}
+      PROBE_CONCURRENCY: ${PROBE_CONCURRENCY:-16}
+      CHAT_LLM_CONCURRENCY: ${CHAT_LLM_CONCURRENCY:-8}
+      MEMO_CONCURRENCY: ${MEMO_CONCURRENCY:-2}
+      PROBE_UPSTREAM_CONCURRENCY: ${PROBE_UPSTREAM_CONCURRENCY:-20}
     ports:
       - "80:80"
       - "443:443"
@@ -25,5 +29,40 @@ services:
       - ./nginx:/etc/nginx/templates:ro
     restart: unless-stopped
 
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    depends_on:
+      - kuber
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/kuber-ops.json
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "127.0.0.1:3001:3000"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
 volumes:
   kuber-data:
+  prometheus-data:
+  grafana-data:

@@ -1,0 +1,22 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: kuber-api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["kuber:80"]
+    relabel_configs:
+      - source_labels: [job]
+        target_label: service
+        replacement: reasoning
+
+  - job_name: kuber-sme
+    metrics_path: /sme-metrics
+    static_configs:
+      - targets: ["kuber:80"]
+    relabel_configs:
+      - source_labels: [job]
+        target_label: service
+        replacement: sme

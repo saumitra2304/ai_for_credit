@@ -119,6 +119,8 @@ export function extractChartData(payload) {
   const peers = (peerBlock.peers ?? [])
     .map((peer) => ({
       name: (peer.legalName ?? peer.legal_name ?? 'Peer').replace(/ PRIVATE LIMITED| LIMITED/gi, ''),
+      legalName: peer.legalName ?? peer.legal_name ?? 'Peer',
+      cin: String(peer.cin || '').trim().toUpperCase(),
       revenue: crore(peer.revenue),
     }))
     .filter((row) => row.revenue != null)

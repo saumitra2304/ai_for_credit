@@ -2,6 +2,7 @@
 
 import json
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 from sql_db.db import open_db
 from state_models import chat_memory
@@ -28,6 +29,7 @@ def _index_fields(chat: chat_memory) -> tuple[str, str, int]:
     labels = [
         {"cin": cin, "label": (slot or {}).get("label") or cin}
         for cin, slot in cache.items()
+        if not str(cin).startswith("_") and isinstance(slot, dict)
     ]
     return preview, _dumps(labels), len(trail)
 
@@ -58,6 +60,27 @@ def _labels_to_cache(raw: str | None) -> dict:
     return out
 
 
+def persistable_chat(chat):
+    """Drop raw Probe blobs before SQLite write. Flats in company_cache are enough."""
+    stored = SimpleNamespace(**vars(chat))
+    stored.sme_data = {}
+    return stored
+
+
+def cins_needing_fetch(chat: chat_memory, cin_list: list[str]) -> list[str]:
+    cache = chat.company_cache if isinstance(chat.company_cache, dict) else {}
+    sme = chat.sme_data if isinstance(chat.sme_data, dict) else {}
+    needed = []
+    for cin in cin_list:
+        if cin in sme:
+            continue
+        slot = cache.get(cin) or {}
+        if isinstance(slot, dict) and (slot.get("flat") or "").strip():
+            continue
+        needed.append(cin)
+    return needed
+
+
 async def get_chat(user_id, chat_id):
     db = await open_db()
     rows = await db.execute_fetchall(
@@ -69,7 +92,7 @@ async def get_chat(user_id, chat_id):
         (user_id, _chat_id_key(chat_id)),
     )
     if not rows:
-        return 0
+        return None
     return _row_to_chat(rows[0])
 
 
@@ -108,7 +131,8 @@ async def create_chat(user_id, chat_id, _cin_list, _query):
 
 
 async def update_chat(chat: chat_memory):
-    preview, labels, count = _index_fields(chat)
+    stored = persistable_chat(chat)
+    preview, labels, count = _index_fields(stored)
     db = await open_db()
     await db.execute(
         """
@@ -118,15 +142,15 @@ async def update_chat(chat: chat_memory):
         WHERE user_id = ? AND chat_id = ?
         """,
         (
-            _dumps(chat.sme_data),
-            _dumps(chat.message_trail),
-            _dumps(chat.company_cache),
+            _dumps(stored.sme_data),
+            _dumps(stored.message_trail),
+            _dumps(stored.company_cache),
             _utcnow(),
             preview,
             labels,
             count,
-            chat.user_id,
-            _chat_id_key(chat.chat_id),
+            stored.user_id,
+            _chat_id_key(stored.chat_id),
         ),
     )
     await db.commit()

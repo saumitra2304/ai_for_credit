@@ -158,7 +158,7 @@ pub async fn insta_summary(
         "https://instafinancials.com/api/InstaSummary/v1/json/CompanyCIN/{}",
         params.cin
     );
-    let api_key = state.api_key_value();
+    let api_key = crate::api_key_value(&state);
 
     let result = fetch_json(&state.reqwest_client, &url, &api_key).await.map(Json);
     finish_call(
@@ -182,7 +182,7 @@ pub async fn brisk_all(
     let start = Instant::now();
     let start_ts = utc_now();
     let client = &state.reqwest_client;
-    let api_key = state.api_key_value();
+    let api_key = crate::api_key_value(&state);
 
     let result = async {
         let order_url = format!(

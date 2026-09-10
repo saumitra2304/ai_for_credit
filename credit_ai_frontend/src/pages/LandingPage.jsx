@@ -2,389 +2,450 @@ import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import {
   ArrowRight,
-  Building2,
-  FileSearch,
+  BarChart3,
+  FileText,
   Gavel,
-  Globe2,
-  LineChart,
   Newspaper,
   Scale,
+  Search,
   ShieldCheck,
-  Sparkles,
-  Target,
-  Workflow,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { KuberLogo } from '@/components/KuberLogo'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { useAuthStore } from '@/store/useAuthStore'
 
-const fadeUp = {
-  hidden: { opacity: 0, y: 22 },
+const fade = {
+  hidden: { opacity: 0, y: 18 },
   show: (delay = 0) => ({
     opacity: 1,
     y: 0,
-    transition: { duration: 0.55, delay, ease: [0.22, 1, 0.36, 1] },
+    transition: { duration: 0.6, delay, ease: [0.22, 1, 0.36, 1] },
   }),
 }
+
+const pains = [
+  {
+    title: 'The file is never in one place',
+    body: 'MCA PDFs, charge searches, MSME delays, a legal dump, and three news tabs. The first read is assembling the packet, not forming a view.',
+  },
+  {
+    title: 'The committee wants a view, not a scrape',
+    body: 'Someone still has to write strengths, red flags, and a recommendation. Spreadsheets do not walk into the meeting on their own.',
+  },
+  {
+    title: 'Peers and news arrive too late',
+    body: 'Comparables live in last year’s pitch. Headlines sit outside the filing pack. The call gets made on whichever tab was open last.',
+  },
+]
 
 const steps = [
   {
     n: '01',
-    title: 'Find the company',
-    body: 'Search MCA names and CINs. Select the legal entity you actually mean to underwrite.',
+    title: 'Name the legal entity',
+    body: 'Search MCA companies and LLPs. Pick the CIN you actually mean to underwrite — not a lookalike group company.',
   },
   {
     n: '02',
-    title: 'Load the books',
-    body: 'Pull standalone filings, ratios, charges, MSME delays, and legal history from official sources.',
+    title: 'Load the official record',
+    body: 'Standalone filings, ratios, charges, MSME supplier delays, and legal history come in from Probe. Charts are drawn from those numbers, not from the model.',
   },
   {
     n: '03',
-    title: 'One credit pass',
-    body: 'GPT-5.4 nano writes tables, red flags, and a risk conclusion, with live web search for news the filings omit.',
+    title: 'Read, challenge, download',
+    body: 'One credit pass writes the first view. Ask follow-ups, add peers or your Excel, and take a committee memo as PDF or Word.',
   },
 ]
 
-const goals = [
+const outcomes = [
   {
-    icon: Target,
-    title: 'Faster first reads',
-    body: 'Cut the time from “who is this borrower?” to a structured credit view you can discuss.',
+    icon: FileText,
+    title: 'A memo you can defend',
+    body: 'A fresh write-up for the credit committee — not a print of the chat. Filings, peers, and your notes sit in the same packet.',
   },
   {
-    icon: Scale,
-    title: 'Numbers before narrative',
-    body: 'Assessments stay tied to filings. Headlines are cited from web search, not invented.',
+    icon: BarChart3,
+    title: 'Charts from the books',
+    body: 'P&L, leverage, cash flow, and peer revenue from Probe. The model does not draw the graphs. The filings do.',
   },
   {
-    icon: ShieldCheck,
-    title: 'Defensible conclusions',
-    body: 'Leverage, liquidity, legal exposure, and MSME behaviour sit in one place so a credit call has a paper trail.',
+    icon: Search,
+    title: 'A chat that already knows the company',
+    body: 'Follow up on CCC, a charge, a rating action, or a peer. The workspace keeps the borrower in context.',
   },
 ]
 
-const features = [
-  {
-    icon: FileSearch,
-    title: 'MCA filings, assembled',
-    body: 'Standalone statements, ratios, charges, and compliance flags for Indian companies and LLPs.',
-  },
-  {
-    icon: Newspaper,
-    title: 'News next to the books',
-    body: 'OpenAI web search runs in the same model pass for ratings, litigation, and current events.',
-  },
-  {
-    icon: Gavel,
-    title: 'Legal and MSME context',
-    body: 'Payment delays and legal history are flattened into the assessment, not left in a side PDF.',
-  },
-  {
-    icon: LineChart,
-    title: 'Follow-up in the same chat',
-    body: 'Ask about a ratio, a year, or a headline. The model answers against the companies already loaded.',
-  },
-  {
-    icon: Globe2,
-    title: 'Built for a web team',
-    body: 'Sign in from the browser. Keys and filings stay on your API. The workspace is Vercel-hosted.',
-  },
-  {
-    icon: Workflow,
-    title: 'One model, one pass',
-    body: 'No stitched multi-LLM loop. Filings plus web search go into a single credit write-up.',
-  },
-]
+function ProductStage() {
+  return (
+    <div className="glass-panel relative overflow-hidden rounded-2xl border shadow-2xl shadow-foreground/5 sm:rounded-3xl">
+      <div className="flex items-center justify-between gap-2 border-b border-border/60 px-3 py-3 sm:px-4">
+        <div className="flex items-center gap-2">
+          <span className="h-2 w-2 rounded-full bg-emerald-500" />
+          <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+            Sample first read
+          </p>
+        </div>
+        <p className="hidden font-mono text-[10px] text-muted-foreground sm:block">
+          CIN L74120MH1985PLC035308
+        </p>
+      </div>
+      <div className="grid lg:grid-cols-[0.92fr_1.08fr]">
+        <div className="border-b border-border/60 p-4 sm:p-5 lg:border-b-0 lg:border-r">
+          <p className="font-display text-xl leading-tight text-foreground sm:text-2xl">
+            Godrej Properties Limited
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">Maharashtra · real estate · standalone FY24</p>
+          <div className="mt-5 inline-flex items-center rounded-full bg-emerald-700/12 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-800 dark:bg-emerald-400/15 dark:text-emerald-300">
+            Advance with monitoring
+          </div>
+          <dl className="mt-6 grid grid-cols-3 gap-1.5 sm:gap-3">
+            {[
+              ['Revenue', '₹3,033 cr'],
+              ['EBITDA', '18.2%'],
+              ['ICR', '4.6x'],
+            ].map(([label, value]) => (
+              <div key={label} className="min-w-0 rounded-xl border border-border/70 bg-background/70 px-1.5 py-3 sm:px-3">
+                <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</dt>
+                <dd className="mt-1 truncate text-sm font-medium tabular-nums sm:text-base">{value}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="mt-5 text-[11px] leading-relaxed text-muted-foreground">
+            Illustrative packet. Live reads use the filings of the company you select.
+          </p>
+        </div>
+        <div className="space-y-4 p-4 sm:p-5">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-800 dark:text-emerald-300">
+              Strengths
+            </p>
+            <ul className="mt-2 space-y-1.5 text-sm leading-relaxed text-foreground/85">
+              <li>Godrej brand and group backing; residential bookings scale across Mumbai, NCR, and Bengaluru.</li>
+              <li>Liquidity and capital-market access stay visible in the charge and rating record.</li>
+            </ul>
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-rose-800 dark:text-rose-300">
+              Red flags
+            </p>
+            <ul className="mt-2 space-y-1.5 text-sm leading-relaxed text-foreground/85">
+              <li>Collections lag bookings — construction and land spend need a cap against unsold inventory.</li>
+              <li>Group land and JV vehicles sit in the related-party pack; keep them in monitoring.</li>
+            </ul>
+          </div>
+          <div className="flex flex-wrap gap-2 pt-1">
+            {['Committee memo', 'Peer revenue', 'Cited news'].map((chip) => (
+              <span
+                key={chip}
+                className="rounded-full border border-border/70 bg-background/60 px-2.5 py-1 text-[11px] text-muted-foreground"
+              >
+                {chip}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export function LandingPage() {
   const status = useAuthStore((s) => s.status)
   const signedIn = status === 'authenticated'
 
   return (
-    <div className="relative min-h-screen overflow-hidden">
+    <div className="relative min-h-dvh">
       <div className="mesh-bg pointer-events-none absolute inset-0" />
-      <motion.div
-        aria-hidden
-        className="pointer-events-none absolute -left-24 top-16 h-80 w-80 rounded-full bg-primary/20 blur-3xl"
-        animate={{ y: [0, -20, 0], scale: [1, 1.06, 1] }}
-        transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut' }}
-      />
-      <motion.div
-        aria-hidden
-        className="pointer-events-none absolute -right-20 top-40 h-96 w-96 rounded-full bg-emerald-400/15 blur-3xl"
-        animate={{ y: [0, 24, 0], opacity: [0.35, 0.65, 0.35] }}
-        transition={{ duration: 11, repeat: Infinity, ease: 'easeInOut' }}
-      />
+      <div className="landing-grid pointer-events-none absolute inset-0" />
 
-      <header className="relative z-10 mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6 sm:py-5">
-        <Link to="/" aria-label="Kuber home">
-          <KuberLogo size={36} showWordmark />
+      <header className="relative z-20 mx-auto flex w-full max-w-6xl items-center gap-2 px-3 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-6 sm:py-4">
+        <Link to="/" aria-label="Kuber home" className="relative z-10 shrink-0">
+          <KuberLogo size={30} showWordmark />
         </Link>
-        <div className="flex items-center gap-2">
-          <ThemeToggle className="h-8 w-8" />
+        <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-6 text-sm text-muted-foreground md:flex">
+          <a href="#product" className="hover:text-foreground">
+            Product
+          </a>
+          <a href="#how" className="hover:text-foreground">
+            How it works
+          </a>
+          <a href="#why" className="hover:text-foreground">
+            Why Kuber
+          </a>
+        </nav>
+        <div className="relative z-10 ml-auto flex shrink-0 items-center gap-1.5">
           {signedIn ? (
-            <Button asChild>
-              <Link to="/app">
-                Open workspace
-                <ArrowRight className="h-4 w-4" />
-              </Link>
+            <Button asChild className="h-8 rounded-full px-3 text-xs sm:h-9 sm:px-4 sm:text-sm">
+              <Link to="/app">Open workspace</Link>
             </Button>
           ) : (
             <>
-              <Button variant="ghost" asChild>
+              <Button variant="ghost" asChild className="hidden sm:inline-flex">
                 <Link to="/login">Log in</Link>
               </Button>
-              <Button asChild>
-                <Link to="/register">Sign up</Link>
+              <Button asChild className="h-8 rounded-full px-3 text-xs sm:h-9 sm:px-4 sm:text-sm">
+                <Link to="/register">Join</Link>
               </Button>
             </>
           )}
+          <ThemeToggle className="h-8 w-8" />
         </div>
       </header>
 
-      <main className="relative z-10 mx-auto w-full max-w-6xl px-4 pb-8 pt-6 sm:px-6 lg:pt-14">
-        <div className="grid gap-12 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
-          <div>
-            <motion.p
-              custom={0.04}
-              variants={fadeUp}
-              initial="hidden"
-              animate="show"
-              className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-card/70 px-3 py-1 text-xs font-medium text-muted-foreground backdrop-blur"
-            >
-              <Sparkles className="h-3.5 w-3.5 text-primary" />
-              Credit intelligence for Indian corporates
-            </motion.p>
-            <motion.h1
-              custom={0.1}
-              variants={fadeUp}
-              initial="hidden"
-              animate="show"
-              className="mt-5 text-3xl font-semibold tracking-tight text-foreground sm:text-5xl lg:text-[3.15rem] lg:leading-[1.12]"
-            >
-              See the borrower before you take the risk.
-            </motion.h1>
-            <motion.p
-              custom={0.18}
-              variants={fadeUp}
-              initial="hidden"
-              animate="show"
-              className="mt-5 max-w-xl text-base leading-relaxed text-muted-foreground"
-            >
-              Kuber is a credit workspace: search an Indian company, load MCA filings, and get
-              one analyst-style assessment — P&amp;L, leverage, legal, MSME delays, and current
-              news — in a single GPT pass with web search.
-            </motion.p>
-            <motion.div
-              custom={0.26}
-              variants={fadeUp}
-              initial="hidden"
-              animate="show"
-              className="mt-8 flex flex-wrap gap-3"
-            >
-              {signedIn ? (
-                <Button size="lg" asChild>
-                  <Link to="/app">
-                    Continue to workspace
+      <nav className="relative z-10 mx-auto flex w-full max-w-6xl gap-4 overflow-x-auto px-3 pb-1 text-xs text-muted-foreground md:hidden">
+        <a href="#product" className="shrink-0 py-1 hover:text-foreground">
+          Product
+        </a>
+        <a href="#how" className="shrink-0 py-1 hover:text-foreground">
+          How it works
+        </a>
+        <a href="#why" className="shrink-0 py-1 hover:text-foreground">
+          Why Kuber
+        </a>
+      </nav>
+
+      <main>
+        <section className="relative z-10 mx-auto w-full max-w-6xl px-4 pb-10 pt-6 sm:px-6 sm:pt-16">
+          <motion.p
+            custom={0.02}
+            variants={fade}
+            initial="hidden"
+            animate="show"
+            className="max-w-full text-[10px] font-semibold uppercase tracking-[0.14em] text-[#C4A574] sm:text-[11px] sm:tracking-[0.22em]"
+          >
+            Credit intelligence · Indian corporates
+          </motion.p>
+          <motion.h1
+            custom={0.08}
+            variants={fade}
+            initial="hidden"
+            animate="show"
+            className="font-display mt-4 max-w-4xl text-[1.85rem] leading-[1.15] tracking-tight text-pretty text-foreground sm:mt-5 sm:text-5xl sm:leading-[1.08] lg:text-6xl"
+          >
+            Understand the borrower{' '}
+            <em className="italic text-foreground/65">before you take the risk.</em>
+          </motion.h1>
+          <motion.p
+            custom={0.16}
+            variants={fade}
+            initial="hidden"
+            animate="show"
+            className="mt-6 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg"
+          >
+            The expensive mistake is not a slow file. It is saying yes while leverage, legal,
+            MSME delays, and the news are still sitting in fourteen tabs — and the committee
+            asks what you missed.
+          </motion.p>
+          <motion.div
+            custom={0.24}
+            variants={fade}
+            initial="hidden"
+            animate="show"
+            className="mt-8 flex w-full max-w-md flex-col gap-3 sm:max-w-none sm:flex-row sm:flex-wrap sm:items-center"
+          >
+            {signedIn ? (
+              <Button size="lg" asChild className="h-11 w-full rounded-full px-6 sm:w-auto">
+                <Link to="/app">
+                  Continue to workspace
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            ) : (
+              <>
+                <Button size="lg" asChild className="h-11 w-full rounded-full px-6 sm:w-auto">
+                  <Link to="/register">
+                    Start a credit read
                     <ArrowRight className="h-4 w-4" />
                   </Link>
                 </Button>
+                <Button size="lg" variant="outline" asChild className="h-11 w-full rounded-full px-6 sm:w-auto">
+                  <Link to="/login">I already have a desk</Link>
+                </Button>
+              </>
+            )}
+          </motion.div>
+          <motion.ul
+            custom={0.32}
+            variants={fade}
+            initial="hidden"
+            animate="show"
+            className="mt-8 flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground"
+          >
+            {['MCA filings', 'Charges & legal', 'MSME delays', 'Peer revenue', 'Cited web search', 'PDF / Word memo'].map(
+              (item) => (
+                <li key={item} className="flex items-center gap-2">
+          <span className="h-1 w-1 rounded-full bg-[#C4A574]" />
+                  {item}
+                </li>
+              )
+            )}
+          </motion.ul>
+        </section>
+
+        <section id="product" className="relative z-10 mx-auto w-full max-w-6xl scroll-mt-24 px-4 pb-16 sm:px-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.28, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <ProductStage />
+          </motion.div>
+        </section>
+
+        <section id="why" className="relative z-10 mx-auto w-full max-w-6xl scroll-mt-24 px-4 py-8 sm:px-6 sm:py-14">
+          <div className="hairline mb-10 h-px w-full" />
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+            The gap
+          </p>
+          <h2 className="font-display mt-3 max-w-3xl text-[1.65rem] leading-tight sm:text-4xl">
+            Credit still lives in fourteen tabs. The decision does not.
+          </h2>
+          <div className="mt-10 grid gap-4 md:grid-cols-3">
+            {pains.map((pain, index) => (
+              <motion.article
+                key={pain.title}
+                initial={{ opacity: 0, y: 16 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: index * 0.08 }}
+                className="rounded-2xl border border-border/70 bg-card/50 p-5"
+              >
+                <p className="font-mono text-[11px] text-muted-foreground">{String(index + 1).padStart(2, '0')}</p>
+                <h3 className="mt-3 text-base font-semibold leading-snug">{pain.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{pain.body}</p>
+              </motion.article>
+            ))}
+          </div>
+        </section>
+
+        <section id="how" className="relative z-10 mx-auto w-full max-w-6xl scroll-mt-24 px-4 py-10 sm:px-6 sm:py-16">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+            How a read works
+          </p>
+          <h2 className="font-display mt-3 max-w-3xl text-[1.65rem] leading-tight sm:text-4xl">
+            Name the borrower. Load the books. Leave with a view.
+          </h2>
+          <div className="mt-10 grid gap-px overflow-hidden rounded-2xl border border-border/70 bg-border/70 md:grid-cols-3">
+            {steps.map((step, index) => (
+              <motion.article
+                key={step.n}
+                initial={{ opacity: 0, y: 12 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: index * 0.07 }}
+                className="bg-card/80 p-6"
+              >
+                <p className="font-display text-3xl text-foreground/25">{step.n}</p>
+                <h3 className="mt-4 text-base font-semibold">{step.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{step.body}</p>
+              </motion.article>
+            ))}
+          </div>
+        </section>
+
+        <section className="relative z-10 mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
+          <div className="grid gap-4 md:grid-cols-3">
+            {outcomes.map((item, index) => (
+              <motion.article
+                key={item.title}
+                initial={{ opacity: 0, y: 16 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: index * 0.08 }}
+                className="glass-panel rounded-2xl p-6"
+              >
+                <item.icon className="h-5 w-5 text-foreground/70" />
+                <h3 className="mt-4 text-base font-semibold">{item.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{item.body}</p>
+              </motion.article>
+            ))}
+          </div>
+        </section>
+
+        <section className="relative z-10 mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-16">
+          <div className="grid items-center gap-8 rounded-2xl border border-border/70 bg-card/40 px-4 py-8 sm:rounded-3xl sm:px-12 sm:py-10 lg:grid-cols-[1.1fr_0.9fr]">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                Built for the desk
+              </p>
+              <h2 className="font-display mt-3 text-[1.65rem] leading-tight sm:text-4xl">
+                Numbers first. Narrative second. News only when it is cited.
+              </h2>
+              <ul className="mt-6 space-y-3 text-sm leading-relaxed text-muted-foreground">
+                <li className="flex gap-3">
+                  <Scale className="mt-0.5 h-4 w-4 shrink-0 text-foreground/60" />
+                  Assessments stay tied to standalone filings. The model does not invent a P&amp;L.
+                </li>
+                <li className="flex gap-3">
+                  <Newspaper className="mt-0.5 h-4 w-4 shrink-0 text-foreground/60" />
+                  Web search is for ratings, litigation, and what the statements omit — with a paper trail.
+                </li>
+                <li className="flex gap-3">
+                  <Gavel className="mt-0.5 h-4 w-4 shrink-0 text-foreground/60" />
+                  Legal history and MSME delays sit in the same read as leverage and liquidity.
+                </li>
+                <li className="flex gap-3">
+                  <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-foreground/60" />
+                  Your keys and filings stay on your API. The browser is the desk, not the vault.
+                </li>
+              </ul>
+            </div>
+            <div className="rounded-2xl border border-[#C4A574]/35 bg-background/70 p-6">
+              <p className="font-display text-xl leading-snug">
+                “Named for Kubera — the treasurer. A workspace that keeps the books in view.”
+              </p>
+              <p className="mt-4 text-sm text-muted-foreground">
+                Search the entity, wait for the first pass, then interrogate it. Add peers from the
+                chart. Attach your CMA. Take the memo into the room.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section className="relative z-10 mx-auto w-full max-w-6xl px-4 pb-20 sm:px-6">
+          <div className="overflow-hidden rounded-2xl bg-[#161D28] px-4 py-10 text-[#F4EFE6] sm:rounded-3xl sm:px-12 sm:py-12">
+            <h2 className="font-display text-[1.75rem] leading-tight sm:text-5xl sm:leading-[1.12]">
+              Run the next name through Kuber.
+            </h2>
+            <p className="mt-4 max-w-xl text-sm leading-relaxed text-[#F4EFE6]/70 sm:text-base">
+              Create an account, pick a CIN, and ask for a credit view. Follow-ups stay on that
+              borrower. The memo is a document, not a screenshot of the chat.
+            </p>
+            <div className="mt-8 flex w-full max-w-md flex-col gap-3 sm:max-w-none sm:flex-row sm:flex-wrap">
+              {signedIn ? (
+                <Button
+                  size="lg"
+                  asChild
+                  className="h-11 w-full rounded-full bg-[#F4EFE6] px-6 text-[#161D28] hover:bg-[#F4EFE6]/90 sm:w-auto"
+                >
+                  <Link to="/app">Open workspace</Link>
+                </Button>
               ) : (
                 <>
-                  <Button size="lg" asChild>
-                    <Link to="/register">
-                      Start a credit read
-                      <ArrowRight className="h-4 w-4" />
-                    </Link>
+                  <Button
+                    size="lg"
+                    asChild
+                    className="h-11 w-full rounded-full bg-[#F4EFE6] px-6 text-[#161D28] hover:bg-[#F4EFE6]/90 sm:w-auto"
+                  >
+                    <Link to="/register">Create an account</Link>
                   </Button>
-                  <Button size="lg" variant="outline" asChild>
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    asChild
+                    className="h-11 w-full rounded-full border-[#F4EFE6]/25 bg-transparent px-6 text-[#F4EFE6] hover:bg-[#F4EFE6]/10 hover:text-[#F4EFE6] sm:w-auto"
+                  >
                     <Link to="/login">Log in</Link>
                   </Button>
                 </>
               )}
-            </motion.div>
+            </div>
           </div>
-
-          <motion.div
-            initial={{ opacity: 0, x: 28, rotate: 1.5 }}
-            animate={{ opacity: 1, x: 0, rotate: 0 }}
-            transition={{ duration: 0.75, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
-            className="glass-panel relative overflow-hidden rounded-3xl border p-6 shadow-xl"
-          >
-            <motion.div
-              aria-hidden
-              className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/70 to-transparent"
-              animate={{ opacity: [0.3, 1, 0.3] }}
-              transition={{ duration: 3.2, repeat: Infinity }}
-            />
-            <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              <Building2 className="h-3.5 w-3.5" />
-              Live workspace preview
-            </div>
-            <p className="mt-3 text-lg font-semibold">Godrej Properties Limited</p>
-            <p className="font-mono text-xs text-muted-foreground">CIN L74120MH1985PLC035308</p>
-            <div className="mt-5 grid grid-cols-3 gap-2 text-center sm:gap-3">
-              {[
-                ['Revenue', 'From filings'],
-                ['Leverage', 'Tracked'],
-                ['News', 'Web cited'],
-              ].map(([label, value], index) => (
-                <motion.div
-                  key={label}
-                  className="rounded-xl border border-border/60 bg-background/50 px-2 py-3"
-                  animate={{ y: [0, index % 2 === 0 ? -7 : 7, 0] }}
-                  transition={{ duration: 4.2 + index, repeat: Infinity, ease: 'easeInOut' }}
-                >
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
-                  <p className="mt-1 text-sm font-medium">{value}</p>
-                </motion.div>
-              ))}
-            </div>
-            <div className="mt-5 space-y-2.5 text-sm text-muted-foreground">
-              {[
-                'Probe filings and legal history',
-                'One GPT-5.4 nano credit pass',
-                'OpenAI web search for what statements omit',
-              ].map((line, i) => (
-                <motion.p
-                  key={line}
-                  initial={{ opacity: 0, x: 8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.45 + i * 0.12 }}
-                >
-                  <span className="mr-2 font-mono text-[11px] text-primary">{String(i + 1).padStart(2, '0')}</span>
-                  {line}
-                </motion.p>
-              ))}
-            </div>
-          </motion.div>
-        </div>
+        </section>
       </main>
 
-      <section className="relative z-10 mx-auto w-full max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
-        <motion.h2
-          initial={{ opacity: 0, y: 12 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          className="text-2xl font-semibold tracking-tight"
-        >
-          How a read works
-        </motion.h2>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          From name search to a credit memo you can interrogate — without hopping across MCA
-          PDFs, news tabs, and a blank chat window.
-        </p>
-        <div className="mt-8 grid gap-4 md:grid-cols-3">
-          {steps.map((step, index) => (
-            <motion.article
-              key={step.n}
-              initial={{ opacity: 0, y: 18 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: '-40px' }}
-              transition={{ delay: index * 0.08, duration: 0.45 }}
-              whileHover={{ y: -6 }}
-              className="glass-panel rounded-2xl border p-5"
-            >
-              <p className="font-mono text-xs text-primary">{step.n}</p>
-              <h3 className="mt-3 text-base font-semibold">{step.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{step.body}</p>
-            </motion.article>
-          ))}
-        </div>
-      </section>
-
-      <section className="relative z-10 mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
-        <motion.h2
-          initial={{ opacity: 0, y: 12 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          className="text-2xl font-semibold tracking-tight"
-        >
-          What we are aiming for
-        </motion.h2>
-        <div className="mt-8 grid gap-4 md:grid-cols-3">
-          {goals.map((goal, index) => (
-            <motion.article
-              key={goal.title}
-              initial={{ opacity: 0, y: 16 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: index * 0.08 }}
-              className="rounded-2xl border border-border/70 bg-card/40 p-5"
-            >
-              <goal.icon className="h-5 w-5 text-emerald-500" />
-              <h3 className="mt-3 text-sm font-semibold">{goal.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{goal.body}</p>
-            </motion.article>
-          ))}
-        </div>
-      </section>
-
-      <section className="relative z-10 mx-auto w-full max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
-        <motion.h2
-          initial={{ opacity: 0, y: 12 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          className="text-2xl font-semibold tracking-tight"
-        >
-          Inside the product
-        </motion.h2>
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {features.map((feature, index) => (
-            <motion.article
-              key={feature.title}
-              initial={{ opacity: 0, y: 16 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: index * 0.05 }}
-              whileHover={{ y: -5 }}
-              className="glass-panel rounded-2xl border p-5"
-            >
-              <feature.icon className="h-5 w-5 text-primary" />
-              <h3 className="mt-3 text-sm font-semibold">{feature.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{feature.body}</p>
-            </motion.article>
-          ))}
-        </div>
-      </section>
-
-      <section className="relative z-10 mx-auto w-full max-w-6xl px-4 pb-20 sm:px-6">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.98 }}
-          whileInView={{ opacity: 1, scale: 1 }}
-          viewport={{ once: true }}
-          className="glass-panel overflow-hidden rounded-3xl border px-5 py-10 text-center sm:px-12"
-        >
-          <Sparkles className="mx-auto h-6 w-6 text-primary" />
-          <h2 className="mt-3 text-2xl font-semibold tracking-tight">
-            Run the next name through Kuber
-          </h2>
-          <p className="mx-auto mt-2 max-w-lg text-sm text-muted-foreground">
-            Create an account, pick a CIN, and ask for a credit view. Follow-ups stay in the same
-            thread against the companies you already loaded.
-          </p>
-          <div className="mt-6 flex flex-wrap justify-center gap-3">
-            {signedIn ? (
-              <Button size="lg" asChild>
-                <Link to="/app">Open workspace</Link>
-              </Button>
-            ) : (
-              <>
-                <Button size="lg" asChild>
-                  <Link to="/register">Create an account</Link>
-                </Button>
-                <Button size="lg" variant="outline" asChild>
-                  <Link to="/login">Log in</Link>
-                </Button>
-              </>
-            )}
-          </div>
-        </motion.div>
-      </section>
-
-      <footer className="relative z-10 border-t border-border/40 px-6 py-6 text-center text-xs text-muted-foreground">
-        Kuber Credit AI · Indian corporate credit reads from filings and cited web search
+      <footer className="relative z-10 border-t border-border/40 px-4 py-8 pb-[max(2rem,env(safe-area-inset-bottom))] text-center text-xs text-muted-foreground sm:px-6">
+        Kuber · Indian corporate credit reads from filings, legal, MSME, and cited web search
       </footer>
     </div>
   )

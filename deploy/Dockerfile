@@ -9,6 +9,7 @@ RUN cargo build --release -p sme_financial_apis
 FROM python:3.12-slim-bookworm
 RUN apt-get update \
     && apt-get install -y --no-install-recommends nginx gettext-base ca-certificates \
+         libfreetype6 libpng16-16 fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=rust-build /app/target/release/sme_financial_apis /usr/local/bin/sme-api
@@ -26,7 +27,8 @@ ENV SQLITE_PATH=/data/credit_ai.db \
     SME_API_BASE=http://127.0.0.1:3000 \
     SME_API_PORT=3000 \
     PYTHONUNBUFFERED=1 \
-    OPENAI_MODEL_NAME=gpt-5.4-nano
+    OPENAI_MODEL_NAME=gpt-5.4-nano \
+    MPLBACKEND=Agg
 
 EXPOSE 80 443
 VOLUME ["/data"]

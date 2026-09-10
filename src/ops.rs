@@ -109,6 +109,8 @@ pub fn overlay_keys(path: &Path, probe: &mut String, insta: &mut String) {
 #[derive(Default)]
 pub struct SmeMetrics {
     inner: Mutex<Inner>,
+    in_flight: AtomicU64,
+    retries: AtomicU64,
 }
 
 #[derive(Default)]
@@ -116,9 +118,29 @@ struct Inner {
     counts: HashMap<(String, String), u64>,
     duration_sum: HashMap<String, f64>,
     duration_count: HashMap<String, u64>,
+    errors: HashMap<String, u64>,
 }
 
 impl SmeMetrics {
+    pub fn inc_in_flight(&self) {
+        self.in_flight.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn dec_in_flight(&self) {
+        self.in_flight.fetch_sub(1, Ordering::Relaxed);
+    }
+
+    pub fn inc_retry(&self) {
+        self.retries.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn observe_error(&self, route: &str) {
+        let Ok(mut guard) = self.inner.lock() else {
+            return;
+        };
+        *guard.errors.entry(route.to_string()).or_insert(0) += 1;
+    }
+
     pub fn observe(&self, route: &str, status: &str, elapsed: Duration) {
         let Ok(mut guard) = self.inner.lock() else {
             return;
@@ -129,6 +151,9 @@ impl SmeMetrics {
             .or_insert(0) += 1;
         *guard.duration_sum.entry(route.to_string()).or_insert(0.0) += elapsed.as_secs_f64();
         *guard.duration_count.entry(route.to_string()).or_insert(0) += 1;
+        if status != "200" {
+            *guard.errors.entry(route.to_string()).or_insert(0) += 1;
+        }
     }
 
     pub fn render(&self) -> String {
@@ -155,6 +180,24 @@ impl SmeMetrics {
                 "kuber_sme_http_request_duration_seconds_count{{route=\"{route}\"}} {count}\n"
             ));
         }
+        out.push_str(
+            "# HELP kuber_sme_errors_total SME API errors\n# TYPE kuber_sme_errors_total counter\n",
+        );
+        for (route, count) in &guard.errors {
+            out.push_str(&format!(
+                "kuber_sme_errors_total{{route=\"{route}\"}} {count}\n"
+            ));
+        }
+        let in_flight = self.in_flight.load(Ordering::Relaxed);
+        let retries = self.retries.load(Ordering::Relaxed);
+        out.push_str(
+            "# HELP kuber_sme_in_flight In-flight SME upstream calls\n# TYPE kuber_sme_in_flight gauge\n",
+        );
+        out.push_str(&format!("kuber_sme_in_flight {in_flight}\n"));
+        out.push_str(
+            "# HELP kuber_sme_upstream_retries_total Probe/Insta retries\n# TYPE kuber_sme_upstream_retries_total counter\n",
+        );
+        out.push_str(&format!("kuber_sme_upstream_retries_total {retries}\n"));
         out
     }
 }
@@ -276,4 +319,23 @@ pub fn finish_call(
             record_log(&sqlite, "error", &message, Some(&trace));
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn render_includes_counters_and_gauges() {
+        let metrics = SmeMetrics::default();
+        metrics.observe("probe_search", "200", Duration::from_millis(12));
+        metrics.observe("company_details", "500", Duration::from_millis(40));
+        metrics.inc_in_flight();
+        metrics.inc_retry();
+        let text = metrics.render();
+        assert!(text.contains("kuber_sme_http_requests_total"));
+        assert!(text.contains("kuber_sme_errors_total"));
+        assert!(text.contains("kuber_sme_in_flight 1"));
+        assert!(text.contains("kuber_sme_upstream_retries_total 1"));
+    }
 }

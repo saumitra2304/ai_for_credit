@@ -180,6 +180,12 @@ async def stop_writer() -> None:
 
 async def add_log(level: str, source: str, message: str, request_id: str | None = None, extra: dict | None = None) -> None:
     extra = _safe_extra(extra)
+    try:
+        from observability import record_log_event
+
+        record_log_event(level, source)
+    except Exception:
+        pass
     _enqueue(
         (
             "log",
